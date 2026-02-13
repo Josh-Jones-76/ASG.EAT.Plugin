@@ -1,0 +1,77 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>ASG.EAT.Plugin</AssemblyName>
+    <RootNamespace>ASG.EAT.Plugin</RootNamespace>
+    <Version>1.0.0.0</Version>
+    <Authors>ASG Astronomy</Authors>
+    <Description>ASG Electronic Astronomical Tilt (EAT) Device Plugin for N.I.N.A.</Description>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Platforms>x64</Platforms>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- 
+      NINA Plugin Build Notes:
+      ========================
+      To build this plugin you need:
+      1. N.I.N.A. installed (or reference the NINA DLLs directly)
+      2. Set the NINA_DIR environment variable or update HintPath below
+      
+      Typical NINA install path: C:\Program Files\N.I.N.A. - Nighttime Imaging 'N' Astronomy
+      
+      After building, copy the output DLL to:
+        %LOCALAPPDATA%\NINA\Plugins\ASG.EAT.Plugin\
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 
+      NINA Assembly References
+      Update HintPath to your local NINA installation directory.
+    -->
+    <Reference Include="NINA.Core">
+      <HintPath>$(NINA_DIR)\NINA.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="NINA.Plugin">
+      <HintPath>$(NINA_DIR)\NINA.Plugin.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="NINA.Equipment">
+      <HintPath>$(NINA_DIR)\NINA.Equipment.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="NINA.WPF.Base">
+      <HintPath>$(NINA_DIR)\NINA.WPF.Base.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="NINA.Image">
+      <HintPath>$(NINA_DIR)\NINA.Image.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="NINA.Astrometry">
+      <HintPath>$(NINA_DIR)\NINA.Astrometry.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="NINA.Profile">
+      <HintPath>$(NINA_DIR)\NINA.Profile.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- MEF for [Export] and [ImportingConstructor] attributes -->
+    <PackageReference Include="System.ComponentModel.Composition" Version="8.0.0" />
+    <!-- Required by NINA's DockableVM base class (ObservableObject) -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <!-- Serial port communication -->
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+    <!-- JSON settings serialization -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>
