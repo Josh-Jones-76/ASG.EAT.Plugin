@@ -8,9 +8,7 @@ namespace ASG.EAT.Plugin.Views
         public EATOptionsView()
         {
             InitializeComponent();
-            var settings = EATSettings.Load();
-            settings.RefreshPorts();
-            DataContext = settings;
+            DataContext = new EATOptionsViewModel();
         }
     }
 }

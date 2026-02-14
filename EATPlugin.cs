@@ -19,20 +19,20 @@ using NINA.Profile.Interfaces;
 using NINA.WPF.Base.Interfaces.ViewModel;
 using NINA.WPF.Base.ViewModel;
 
-[assembly: AssemblyTitle("ASG Electronic Astronomical Tilt")]
-[assembly: AssemblyDescription("Controls the ASG EAT Arduino-based electronic tilt platform for precise optical train alignment and sensor tilt correction.")]
+[assembly: AssemblyTitle("ASG Electronically Assisted Tilt")]
+[assembly: AssemblyDescription("Controls the ASG Astronomy electronically assisted tilt device for precise sensor tilt correction.")]
 [assembly: AssemblyCompany("ASG Astronomy")]
 [assembly: AssemblyProduct("ASG.EAT.Plugin")]
 [assembly: AssemblyCopyright("Copyright © ASG Astronomy 2025")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.0.0.1")]
+[assembly: AssemblyFileVersion("1.0.0.1")]
 [assembly: System.Runtime.InteropServices.Guid("DBCFE5A5-AF6E-4465-949E-7DFD5E20355B")]
 [assembly: System.Runtime.InteropServices.ComVisible(false)]
 
 [assembly: AssemblyMetadata("Identifier", "DBCFE5A5-AF6E-4465-949E-7DFD5E20355B")]
-[assembly: AssemblyMetadata("Name", "ASG Electronic Astronomical Tilt")]
+[assembly: AssemblyMetadata("Name", "ASG Electronically Assisted Tilt")]
 [assembly: AssemblyMetadata("Author", "ASG Astronomy")]
-[assembly: AssemblyMetadata("Description", "Controls the ASG EAT Arduino-based electronic tilt platform for precise optical train alignment and sensor tilt correction.")]
+[assembly: AssemblyMetadata("Description", "Controls the ASG Astronomy electronically assisted tilt device for precise sensor tilt correction.")]
 [assembly: AssemblyMetadata("License", "MIT")]
 [assembly: AssemblyMetadata("LicenseURL", "https://opensource.org/licenses/MIT")]
 [assembly: AssemblyMetadata("Homepage", "https://github.com/asg-astronomy/eat-plugin")]
@@ -75,7 +75,7 @@ namespace ASG.EAT.Plugin
             Title = "ASG Electronic Tilt";
 
             _settings = EATSettings.Load();
-            _serial = new EATSerialService();
+            _serial = EATConnectionManager.Instance.SerialService;
 
             // Wire up serial events
             _serial.ConnectionStateChanged += (s, connected) =>
@@ -173,9 +173,22 @@ namespace ASG.EAT.Plugin
             set { _isConnected = value; RaisePropertyChanged(); RaisePropertyChanged(nameof(ConnectionStatus)); }
         }
 
-        public string ConnectionStatus => IsConnected
-            ? $"Connected — {_serial.ConnectedPort} @ {_serial.ConnectedBaud}"
-            : "Disconnected";
+        public string ConnectionStatus
+        {
+            get
+            {
+                if (!IsConnected)
+                    return "Disconnected";
+                if (IsMoving)
+                {
+                    // Show specific status based on current operation
+                    if (!string.IsNullOrEmpty(CurrentOperation))
+                        return $"{CurrentOperation} — {_serial.ConnectedPort} @ {_serial.ConnectedBaud}";
+                    return $"Moving — {_serial.ConnectedPort} @ {_serial.ConnectedBaud}";
+                }
+                return $"Connected — {_serial.ConnectedPort} @ {_serial.ConnectedBaud}";
+            }
+        }
 
         // ────────────────────────────────────────────────────────────────
         //  Movement state — drives the LED color (gray/green/red)
@@ -185,7 +198,26 @@ namespace ASG.EAT.Plugin
         public bool IsMoving
         {
             get => _isMoving;
-            set { _isMoving = value; RaisePropertyChanged(); RaisePropertyChanged(nameof(ConnectionStatus)); }
+            set
+            {
+                _isMoving = value;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(ConnectionStatus));
+                // Force WPF to re-evaluate all command CanExecute predicates
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+
+        private string _currentOperation = string.Empty;
+        public string CurrentOperation
+        {
+            get => _currentOperation;
+            set
+            {
+                _currentOperation = value;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(ConnectionStatus));
+            }
         }
 
         // ────────────────────────────────────────────────────────────────
@@ -347,6 +379,17 @@ namespace ASG.EAT.Plugin
         private async void DoCmd(string cmd)
         {
             AppendLog($">> {cmd}");
+
+            // Set operation-specific status text
+            if (cmd.StartsWith("zr"))
+                CurrentOperation = "Resetting Values";
+            else if (cmd.StartsWith("cp"))
+                CurrentOperation = "Getting Positions";
+            else if (cmd.StartsWith("up"))
+                CurrentOperation = "Saving to EEPROM";
+            else
+                CurrentOperation = "Moving";
+
             IsMoving = true;
             IsBusy = true;
             try
@@ -367,6 +410,7 @@ namespace ASG.EAT.Plugin
             }
             finally
             {
+                CurrentOperation = string.Empty;
                 IsMoving = false;
                 IsBusy = false;
             }

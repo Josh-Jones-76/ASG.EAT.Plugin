@@ -62,6 +62,29 @@ namespace ASG.EAT.Plugin.ViewModels
             set { _logSerialTraffic = value; OnPropertyChanged(); }
         }
 
+        // ── Motor Configuration (Arduino commands: cA, cB, cC) ─────────
+
+        private int _motorSpeed = 100;
+        public int MotorSpeed
+        {
+            get => _motorSpeed;
+            set { _motorSpeed = Math.Max(1, Math.Min(2000, value)); OnPropertyChanged(); }
+        }
+
+        private int _motorMaxSpeed = 500;
+        public int MotorMaxSpeed
+        {
+            get => _motorMaxSpeed;
+            set { _motorMaxSpeed = Math.Max(1, Math.Min(2000, value)); OnPropertyChanged(); }
+        }
+
+        private int _motorAcceleration = 100;
+        public int MotorAcceleration
+        {
+            get => _motorAcceleration;
+            set { _motorAcceleration = Math.Max(1, Math.Min(2000, value)); OnPropertyChanged(); }
+        }
+
         // ── Available Ports (for UI combo box) ─────────────────────────
 
         private ObservableCollection<string> _availablePorts = new ObservableCollection<string>();

@@ -5,7 +5,7 @@
     xmlns:views="clr-namespace:ASG.EAT.Plugin.Views"
     xmlns:local="clr-namespace:ASG.EAT.Plugin">
 
-    <DataTemplate x:Key="ASG Electronic Astronomical Tilt_Options">
+    <DataTemplate x:Key="ASG Electronically Assisted Tilt_Options">
         <views:EATOptionsView />
     </DataTemplate>
 

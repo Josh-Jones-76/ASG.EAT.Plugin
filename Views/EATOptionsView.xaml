@@ -14,32 +14,77 @@
                        FontSize="16" FontWeight="Bold" Margin="0,0,0,5"/>
             <TextBlock Text="Plugin Settings" FontSize="12" Opacity="0.7" Margin="0,0,0,15"/>
 
-            <Border BorderBrush="{DynamicResource BorderBrush}" 
+            <Border BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,12">
                 <StackPanel>
                     <TextBlock Text="Serial Connection" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,10"/>
+
+                    <!-- Status LED + text -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10" HorizontalAlignment="Left">
+                        <Ellipse Width="14" Height="14" Margin="0,0,8,0" VerticalAlignment="Center"
+                                 Stroke="{DynamicResource BorderBrush}" StrokeThickness="1">
+                            <Ellipse.Style>
+                                <Style TargetType="Ellipse">
+                                    <!-- Disconnected: gray -->
+                                    <Setter Property="Fill" Value="#555555"/>
+                                    <Style.Triggers>
+                                        <!-- Connected: green -->
+                                        <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                            <Setter Property="Fill" Value="#22CC22"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Ellipse.Style>
+                        </Ellipse>
+                        <TextBlock Text="{Binding ConnectionStatus}"
+                                   VerticalAlignment="Center" FontWeight="SemiBold" FontSize="11"/>
+                    </StackPanel>
+
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/><ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="120"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="COM Port:" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Column="1" ItemsSource="{Binding AvailablePorts}" 
-                                  SelectedItem="{Binding SelectedPort, Mode=TwoWay}" MinWidth="100"/>
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding AvailablePorts}"
+                                  SelectedItem="{Binding SelectedPort, Mode=TwoWay}" MinWidth="100" Margin="0,0,8,0"/>
+                        <Button Grid.Column="2" Content="&#x27f3;"
+                                Command="{Binding RefreshPortsCommand}"
+                                ToolTip="Refresh COM ports"
+                                Padding="12,8" FontSize="12"
+                                Style="{StaticResource StandardButton}"/>
                     </Grid>
-                    <Grid Margin="0,0,0,8">
+                    <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="120"/><ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="Baud Rate:" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Column="1" ItemsSource="{Binding AvailableBaudRates}" 
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding AvailableBaudRates}"
                                   SelectedItem="{Binding BaudRate, Mode=TwoWay}" MinWidth="100"/>
                     </Grid>
-                    <CheckBox Content="Auto-connect on NINA startup" 
-                              IsChecked="{Binding AutoConnectOnStartup, Mode=TwoWay}" Margin="0,4,0,0"/>
+
+                    <!-- Connect/Disconnect Buttons -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                        <Button Command="{Binding ConnectCommand}"
+                                Padding="16,8" Margin="0,0,8,0" MinHeight="36"
+                                Style="{StaticResource StandardButton}">
+                            <StackPanel Orientation="Horizontal" Margin="4,0">
+                                <TextBlock Text="&#x1F50C;" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Connect" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding DisconnectCommand}"
+                                Padding="16,8" Margin="0,0,0,0" MinHeight="36"
+                                Style="{StaticResource StandardButton}">
+                            <StackPanel Orientation="Horizontal" Margin="4,0">
+                                <TextBlock Text="&#x1F5D9;" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Disconnect" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 
-            <Border BorderBrush="{DynamicResource BorderBrush}" 
+            <Border BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,12">
                 <StackPanel>
                     <TextBlock Text="Device Preferences" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,10"/>
@@ -55,20 +100,51 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="150"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Default Speed:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="1" Text="{Binding DefaultSpeed, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" HorizontalContentAlignment="Right"/>
-                        <TextBlock Grid.Column="2" Text=" steps/sec" VerticalAlignment="Center"/>
-                    </Grid>
-                    <Grid Margin="0,0,0,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="150"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
                         <TextBlock Text="Default Step Size:" VerticalAlignment="Center"/>
                         <TextBox Grid.Column="1" Text="{Binding DefaultStepSize, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" HorizontalContentAlignment="Right"/>
                         <TextBlock Grid.Column="2" Text=" steps" VerticalAlignment="Center"/>
                     </Grid>
-                    <CheckBox Content="Log serial traffic to debug output" 
-                              IsChecked="{Binding LogSerialTraffic, Mode=TwoWay}" Margin="0,4,0,0"/>
+
+                    <!-- Motor Configuration (Arduino commands: cA, cB, cC) -->
+                    <Separator Margin="0,8,0,8"/>
+                    <TextBlock Text="Motor Configuration" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,8"/>
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/><ColumnDefinition Width="80"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Speed:" VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="1" Text="{Binding MotorSpeed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalContentAlignment="Right"/>
+                        <Button Grid.Column="2" Content="Save" Command="{Binding SaveSpeedCommand}"
+                                Padding="12,4" Margin="8,0,0,0" MinWidth="60"/>
+                        <TextBlock Grid.Column="3" Text=" Set the Speed of motors. Recommended 100-200." VerticalAlignment="Center" Margin="8,0,0,0" FontSize="10" Opacity="0.6"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/><ColumnDefinition Width="80"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Max Speed:" VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="1" Text="{Binding MotorMaxSpeed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalContentAlignment="Right"/>
+                        <Button Grid.Column="2" Content="Save" Command="{Binding SaveMaxSpeedCommand}"
+                                Padding="12,4" Margin="8,0,0,0" MinWidth="60"/>
+                        <TextBlock Grid.Column="3" Text=" Set the Max Speed of motors. Recommended 100-200." VerticalAlignment="Center" Margin="8,0,0,0" FontSize="10" Opacity="0.6"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/><ColumnDefinition Width="80"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Acceleration:" VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="1" Text="{Binding MotorAcceleration, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalContentAlignment="Right"/>
+                        <Button Grid.Column="2" Content="Save" Command="{Binding SaveAccelerationCommand}"
+                                Padding="12,4" Margin="8,0,0,0" MinWidth="60"/>
+                        <TextBlock Grid.Column="3" Text=" Set the Acceleration of motors. Recommended 200-300." VerticalAlignment="Center" Margin="8,0,0,0" FontSize="10" Opacity="0.6"/>
+                    </Grid>
+
+                    <!-- Status message -->
+                    <TextBlock Text="{Binding StatusMessage}" FontSize="11" Foreground="{DynamicResource PrimaryBrush}"
+                               Margin="0,4,0,8" MinHeight="16"/>
                 </StackPanel>
             </Border>
 
