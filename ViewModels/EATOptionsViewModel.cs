@@ -105,6 +105,24 @@ namespace ASG.EAT.Plugin.ViewModels
             set { _settings.MotorAcceleration = value; OnPropertyChanged(); _settings.Save(); }
         }
 
+        public int Orientation
+        {
+            get => _settings.Orientation;
+            set
+            {
+                _settings.Orientation = value;
+                OnPropertyChanged();
+                _settings.Save();
+                OnPropertyChanged(nameof(InnerRotationAngle));
+                // Send orientation command to Arduino when changed
+                SendOrientationCommand(value);
+            }
+        }
+
+        // ── Orientation visualization ───────────────────────────────────
+
+        public double InnerRotationAngle => (Orientation - 1) * 90;
+
         public System.Collections.ObjectModel.ObservableCollection<string> AvailablePorts
         {
             get => _settings.AvailablePorts;
@@ -165,6 +183,9 @@ namespace ASG.EAT.Plugin.ViewModels
 
                 // Request current motor configuration from Arduino
                 await LoadMotorConfigurationFromArduino();
+
+                // Load orientation from Arduino
+                await LoadOrientationFromArduino();
 
                 ClearStatusAfterDelay(3000);
             }
@@ -310,6 +331,11 @@ namespace ASG.EAT.Plugin.ViewModels
                                         case "Acceleration":
                                             MotorAcceleration = value;
                                             break;
+                                        case "Orientation":
+                                            _settings.Orientation = value;
+                                            OnPropertyChanged(nameof(Orientation));
+                                            OnPropertyChanged(nameof(InnerRotationAngle));
+                                            break;
                                     }
                                 });
                             }
@@ -322,6 +348,44 @@ namespace ASG.EAT.Plugin.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"⚠ Failed to load motor config: {ex.Message}";
+            }
+        }
+
+        // ── Load Orientation from Arduino ───────────────────────────────
+
+        private async System.Threading.Tasks.Task LoadOrientationFromArduino()
+        {
+            try
+            {
+                // Send 'ep' command to get EEPROM values (which includes orientation)
+                // This is already handled in LoadMotorConfigurationFromArduino above
+                // But we can add a specific check if needed
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"⚠ Failed to load orientation: {ex.Message}";
+            }
+        }
+
+        // ── Send Orientation Command to Arduino ─────────────────────────
+
+        private async void SendOrientationCommand(int orientation)
+        {
+            // Only send if connected
+            if (!_serial.IsConnected)
+                return;
+
+            try
+            {
+                // Send orientation command (e.g., "or,1")
+                string cmd = $"or,{orientation}";
+                var response = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
+                StatusMessage = $"✓ Orientation set to #{orientation}";
+                ClearStatusAfterDelay(2000);
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"⚠ Failed to set orientation: {ex.Message}";
             }
         }
 

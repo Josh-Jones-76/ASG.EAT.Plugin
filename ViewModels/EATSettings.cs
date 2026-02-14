@@ -85,6 +85,15 @@ namespace ASG.EAT.Plugin.ViewModels
             set { _motorAcceleration = Math.Max(1, Math.Min(2000, value)); OnPropertyChanged(); }
         }
 
+        // ── Orientation (1-4, represents 0°, 90°, 180°, 270°) ──────────
+
+        private int _orientation = 1;
+        public int Orientation
+        {
+            get => _orientation;
+            set { _orientation = Math.Max(1, Math.Min(4, value)); OnPropertyChanged(); }
+        }
+
         // ── Available Ports (for UI combo box) ─────────────────────────
 
         private ObservableCollection<string> _availablePorts = new ObservableCollection<string>();

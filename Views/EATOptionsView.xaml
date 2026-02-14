@@ -3,10 +3,15 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:utility="clr-namespace:ASG.EAT.Plugin.Utility"
              mc:Ignorable="d"
              d:DesignWidth="450" d:DesignHeight="400"
              Background="{DynamicResource BackgroundBrush}"
              Foreground="{DynamicResource PrimaryBrush}">
+
+    <UserControl.Resources>
+        <utility:IntToBoolConverter x:Key="IntToBoolConverter"/>
+    </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
         <StackPanel>
@@ -68,16 +73,20 @@
                                 Padding="16,8" Margin="0,0,8,0" MinHeight="36"
                                 Style="{StaticResource StandardButton}">
                             <StackPanel Orientation="Horizontal" Margin="4,0">
-                                <TextBlock Text="&#x1F50C;" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Connect" FontSize="11" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#x1F50C;" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource ButtonForegroundBrush}"/>
+                                <TextBlock Text="Connect" FontSize="11" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource ButtonForegroundBrush}"/>
                             </StackPanel>
                         </Button>
                         <Button Command="{Binding DisconnectCommand}"
                                 Padding="16,8" Margin="0,0,0,0" MinHeight="36"
                                 Style="{StaticResource StandardButton}">
                             <StackPanel Orientation="Horizontal" Margin="4,0">
-                                <TextBlock Text="&#x1F5D9;" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Disconnect" FontSize="11" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#x1F5D9;" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource ButtonForegroundBrush}"/>
+                                <TextBlock Text="Disconnect" FontSize="11" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource ButtonForegroundBrush}"/>
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -142,22 +151,138 @@
                         <TextBlock Grid.Column="3" Text=" Set the Acceleration of motors. Recommended 200-300." VerticalAlignment="Center" Margin="8,0,0,0" FontSize="10" Opacity="0.6"/>
                     </Grid>
 
+                    <!-- Orientation Selection -->
+                    <Separator Margin="0,8,0,8"/>
+                    <TextBlock Text="Device Orientation" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,8"/>
+
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="380"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Visual Preview: Layered Images -->
+                        <Grid Grid.Column="0" Width="360" Height="360" HorizontalAlignment="Left">
+                            <!-- Outer image (bottom layer - static) -->
+                            <Image Source="pack://application:,,,/ASG.EAT.Plugin;component/Assets/EAT-Outer.png"
+                                   Stretch="Uniform" />
+
+                            <!-- Inner image (top layer - rotates based on orientation) -->
+                            <Image Source="pack://application:,,,/ASG.EAT.Plugin;component/Assets/EAT-Inner.png"
+                                   Stretch="Uniform"
+                                   RenderTransformOrigin="0.5,0.5">
+                                <Image.RenderTransform>
+                                    <RotateTransform Angle="{Binding InnerRotationAngle}"/>
+                                </Image.RenderTransform>
+                            </Image>
+                        </Grid>
+
+                        <!-- Orientation Selection Buttons -->
+                        <StackPanel Grid.Column="1" Margin="20,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="Select Orientation:" FontSize="11" Margin="0,0,0,8"/>
+
+                            <RadioButton Content="Orientation #1 (0°)"
+                                         IsChecked="{Binding Orientation, Converter={StaticResource IntToBoolConverter}, ConverterParameter=1}"
+                                         Margin="0,0,0,6" FontSize="11"/>
+                            <RadioButton Content="Orientation #2 (90°)"
+                                         IsChecked="{Binding Orientation, Converter={StaticResource IntToBoolConverter}, ConverterParameter=2}"
+                                         Margin="0,0,0,6" FontSize="11"/>
+                            <RadioButton Content="Orientation #3 (180°)"
+                                         IsChecked="{Binding Orientation, Converter={StaticResource IntToBoolConverter}, ConverterParameter=3}"
+                                         Margin="0,0,0,6" FontSize="11"/>
+                            <RadioButton Content="Orientation #4 (270°)"
+                                         IsChecked="{Binding Orientation, Converter={StaticResource IntToBoolConverter}, ConverterParameter=4}"
+                                         Margin="0,0,0,6" FontSize="11"/>
+                        </StackPanel>
+                    </Grid>
+
                     <!-- Status message -->
                     <TextBlock Text="{Binding StatusMessage}" FontSize="11" Foreground="{DynamicResource PrimaryBrush}"
                                Margin="0,4,0,8" MinHeight="16"/>
                 </StackPanel>
             </Border>
 
-            <Border BorderBrush="{DynamicResource BorderBrush}" 
+            <Border BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,12">
                 <StackPanel>
-                    <TextBlock Text="About" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8"/>
-                    <TextBlock TextWrapping="Wrap" Opacity="0.8">
-                        ASG Electronic Astronomical Tilt (EAT) Plugin v1.0
+                    <TextBlock Text="About" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,10"/>
+
+                    <!-- Plugin Version -->
+                    <TextBlock TextWrapping="Wrap" Opacity="0.85" Margin="0,0,0,12">
+                        <Bold>ASG Electronic Astronomical Tilt (EAT) Plugin v1.0</Bold>
                         <LineBreak/>
-                        Controls the ASG EAT Arduino-based electronic tilt platform
-                        for precise optical train alignment and sensor tilt correction.
-                        <LineBreak/><LineBreak/>
+                        Controls the ASG EAT Arduino-based electronic tilt platform for precise optical train alignment and sensor tilt correction.
+                    </TextBlock>
+
+                    <Separator Margin="0,4,0,12"/>
+
+                    <!-- Product Information -->
+                    <TextBlock TextWrapping="Wrap" Opacity="0.85" Margin="0,0,0,12">
+                        <Bold>ASG Electronic Photon Cage with EAT Technology</Bold>
+                        <LineBreak/>
+                        The ASG Electronic Photon Cage features Electronically Assisted Tilt (EAT) technology,
+                        enabling remote precision adjustment of camera backfocus and tilt for astrophotography.
+                        Dial in optical alignment from anywhere—whether in your backyard or remote observatory.
+                    </TextBlock>
+
+                    <!-- Key Features -->
+                    <TextBlock TextWrapping="Wrap" Opacity="0.85" Margin="0,0,0,12">
+                        <Bold>Key Features:</Bold>
+                        <LineBreak/>
+                        • Backfocus resolution: ~1.8 microns
+                        <LineBreak/>
+                        • Tilt resolution: ~0.6 microns at sensor
+                        <LineBreak/>
+                        • Total backfocus adjustment: ~2mm in/out
+                        <LineBreak/>
+                        • Lightweight: 23 oz head unit (RASA/Hyperstar compatible)
+                        <LineBreak/>
+                        • 136mm diameter with minimal central obstruction
+                    </TextBlock>
+
+                    <Separator Margin="0,4,0,12"/>
+
+                    <!-- Company & Support Information -->
+                    <TextBlock TextWrapping="Wrap" Opacity="0.85" Margin="0,0,0,8">
+                        <Bold>About ASG Astronomy, LLC</Bold>
+                        <LineBreak/>
+                        Precision instruments designed to capture the Cosmos.
+                    </TextBlock>
+
+                    <TextBlock TextWrapping="Wrap" Opacity="0.8" Margin="0,0,0,12">
+                        <Bold>Purchase Options:</Bold>
+                        <LineBreak/>
+                        Visit
+                        <Hyperlink NavigateUri="https://asgastronomy.com/photon-cages/" RequestNavigate="Hyperlink_RequestNavigate">
+                            asgastronomy.com/photon-cages/
+                        </Hyperlink>
+                        <LineBreak/>
+                        Available in assorted colors to match your equipment.
+                    </TextBlock>
+
+                    <TextBlock TextWrapping="Wrap" Opacity="0.8" Margin="0,0,0,12">
+                        <Bold>Need Help?</Bold>
+                        <LineBreak/>
+                        Contact us at
+                        <Hyperlink NavigateUri="mailto:sales@asgastronomy.com" RequestNavigate="Hyperlink_RequestNavigate">
+                            sales@asgastronomy.com
+                        </Hyperlink>
+                        <LineBreak/>
+                        Visit
+                        <Hyperlink NavigateUri="https://asgastronomy.com" RequestNavigate="Hyperlink_RequestNavigate">
+                            asgastronomy.com
+                        </Hyperlink>
+                        for more information and educational content.
+                    </TextBlock>
+
+                    <Separator Margin="0,4,0,12"/>
+
+                    <!-- Basic Commands -->
+                    <TextBlock TextWrapping="Wrap" Opacity="0.85" Margin="0,0,0,8">
+                        <Bold>Basic Commands</Bold>
+                    </TextBlock>
+
+                    <TextBlock TextWrapping="Wrap" Opacity="0.75" Margin="0,0,0,8" FontSize="11">
                         Corner commands: tr, tl, br, bl (paired 2-motor tilt)
                         <LineBreak/>
                         Direction commands: tp, bt, rt, lt (4-motor tilt)

@@ -9,6 +9,8 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using ASG.EAT.Plugin.Services;
 using ASG.EAT.Plugin.ViewModels;
 using ASG.EAT.Plugin.Views;
@@ -74,6 +76,12 @@ namespace ASG.EAT.Plugin
         {
             Title = "ASG Electronic Tilt";
 
+            // Set plugin icon - Simple 5-pointed star for astronomy
+            var starGeometry = Geometry.Parse("M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z");
+            var iconGroup = new GeometryGroup();
+            iconGroup.Children.Add(starGeometry);
+            ImageGeometry = iconGroup;
+
             _settings = EATSettings.Load();
             _serial = EATConnectionManager.Instance.SerialService;
 
@@ -83,12 +91,25 @@ namespace ASG.EAT.Plugin
                 Application.Current?.Dispatcher?.Invoke(() =>
                 {
                     IsConnected = connected;
+
+                    // When connected (from any source), initialize the panel
+                    if (connected)
+                    {
+                        OnConnected();
+                    }
+                    else
+                    {
+                        OnDisconnected();
+                    }
                 });
             };
 
             _serial.ErrorOccurred += (s, msg) =>
             {
-                AppendLog($"⚠ {msg}");
+                Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    AppendLog($"⚠ {msg}");
+                });
             };
 
             // ── Connection commands ────────────────────────────────────
@@ -99,16 +120,18 @@ namespace ASG.EAT.Plugin
             RefreshPortsCommand = new RelayCommand(_ => DoRefreshPorts());
 
             // ── Directional tilt (4-motor): tp, bt, lt, rt ────────────
-            MoveTopCommand = new RelayCommand(_ => DoCmd($"tp,{TopSteps}"), _ => IsConnected && !IsMoving);
-            MoveBottomCommand = new RelayCommand(_ => DoCmd($"bt,{BottomSteps}"), _ => IsConnected && !IsMoving);
-            MoveLeftCommand = new RelayCommand(_ => DoCmd($"lt,{LeftSteps}"), _ => IsConnected && !IsMoving);
-            MoveRightCommand = new RelayCommand(_ => DoCmd($"rt,{RightSteps}"), _ => IsConnected && !IsMoving);
+            // Commands are mapped based on orientation to match camera position
+            MoveTopCommand = new RelayCommand(_ => DoCmd(MapDirectionCommand("tp", TopSteps)), _ => IsConnected && !IsMoving);
+            MoveBottomCommand = new RelayCommand(_ => DoCmd(MapDirectionCommand("bt", BottomSteps)), _ => IsConnected && !IsMoving);
+            MoveLeftCommand = new RelayCommand(_ => DoCmd(MapDirectionCommand("lt", LeftSteps)), _ => IsConnected && !IsMoving);
+            MoveRightCommand = new RelayCommand(_ => DoCmd(MapDirectionCommand("rt", RightSteps)), _ => IsConnected && !IsMoving);
 
             // ── Corner tilt (2-motor paired): tl, tr, bl, br ──────────
-            MoveTopLeftCommand = new RelayCommand(_ => DoCmd($"tl,{TopLeftSteps}"), _ => IsConnected && !IsMoving);
-            MoveTopRightCommand = new RelayCommand(_ => DoCmd($"tr,{TopRightSteps}"), _ => IsConnected && !IsMoving);
-            MoveBottomLeftCommand = new RelayCommand(_ => DoCmd($"bl,{BottomLeftSteps}"), _ => IsConnected && !IsMoving);
-            MoveBottomRightCommand = new RelayCommand(_ => DoCmd($"br,{BottomRightSteps}"), _ => IsConnected && !IsMoving);
+            // Commands are mapped based on orientation to match camera position
+            MoveTopLeftCommand = new RelayCommand(_ => DoCmd(MapCornerCommand("tl", TopLeftSteps)), _ => IsConnected && !IsMoving);
+            MoveTopRightCommand = new RelayCommand(_ => DoCmd(MapCornerCommand("tr", TopRightSteps)), _ => IsConnected && !IsMoving);
+            MoveBottomLeftCommand = new RelayCommand(_ => DoCmd(MapCornerCommand("bl", BottomLeftSteps)), _ => IsConnected && !IsMoving);
+            MoveBottomRightCommand = new RelayCommand(_ => DoCmd(MapCornerCommand("br", BottomRightSteps)), _ => IsConnected && !IsMoving);
 
             // ── Backfocus (all 4 motors): bf ───────────────────────────
             BackfocusInCommand = new RelayCommand(_ => DoCmd($"bf,{BackfocusSteps}"), _ => IsConnected && !IsMoving);
@@ -132,11 +155,61 @@ namespace ASG.EAT.Plugin
             DoRefreshPorts();
             AppendLog("[ASG EAT Plugin Ready]");
 
+            // Load default step sizes from settings
+            LoadDefaultStepSizes();
+
             // Auto-connect if configured
             if (_settings.AutoConnectOnStartup && !string.IsNullOrEmpty(_settings.SelectedPort))
             {
                 DoConnect();
             }
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        //  Connection event handlers
+        // ────────────────────────────────────────────────────────────────
+
+        private void OnConnected()
+        {
+            AppendLog("Connection established.");
+
+            // Request current positions
+            System.Threading.Tasks.Task.Run(async () =>
+            {
+                // Small delay to let Arduino settle
+                await System.Threading.Tasks.Task.Delay(500);
+                Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    DoCmd("cp");
+                });
+            });
+        }
+
+        private void OnDisconnected()
+        {
+            AppendLog("Disconnected.");
+
+            // Reset positions on disconnect
+            PositionTL = "—";
+            PositionTR = "—";
+            PositionBL = "—";
+            PositionBR = "—";
+        }
+
+        private void LoadDefaultStepSizes()
+        {
+            int defaultSteps = _settings.DefaultStepSize;
+
+            // Set all step sizes to the default from settings
+            TopSteps = defaultSteps;
+            BottomSteps = defaultSteps;
+            LeftSteps = defaultSteps;
+            RightSteps = defaultSteps;
+            TopLeftSteps = defaultSteps;
+            TopRightSteps = defaultSteps;
+            BottomLeftSteps = defaultSteps;
+            BottomRightSteps = defaultSteps;
+            BackfocusSteps = defaultSteps;
         }
 
         // ────────────────────────────────────────────────────────────────
@@ -353,11 +426,8 @@ namespace ASG.EAT.Plugin
 
             if (ok)
             {
-                AppendLog($"Connected to {SelectedPort}");
                 _settings.Save();
-
-                // Request current positions after connecting
-                DoCmd("cp");
+                // OnConnected() will be called by the ConnectionStateChanged event handler
             }
             else
             {
@@ -368,12 +438,117 @@ namespace ASG.EAT.Plugin
         private void DoDisconnect()
         {
             _serial.Disconnect();
-            AppendLog("Disconnected.");
-            // Reset positions on disconnect
-            PositionTL = "—";
-            PositionTR = "—";
-            PositionBL = "—";
-            PositionBR = "—";
+            // OnDisconnected() will be called by the ConnectionStateChanged event handler
+        }
+
+        // ── Orientation Mapping ─────────────────────────────────────────
+
+        /// <summary>
+        /// Maps a corner command based on device orientation.
+        /// Orientation 1 (0°): tl→tl, tr→tr, bl→bl, br→br
+        /// Orientation 2 (90°): tl→tr, tr→br, bl→tl, br→bl
+        /// Orientation 3 (180°): tl→br, tr→bl, bl→tr, br→tl
+        /// Orientation 4 (270°): tl→bl, tr→tl, bl→br, br→tr
+        /// </summary>
+        private string MapCornerCommand(string logicalCorner, int steps)
+        {
+            var settings = EATSettings.Load();
+            int orientation = settings.Orientation;
+
+            string physicalCorner = logicalCorner; // Default: Orientation 1
+
+            switch (orientation)
+            {
+                case 1: // 0° - No rotation
+                    physicalCorner = logicalCorner;
+                    break;
+                case 2: // 90° clockwise
+                    physicalCorner = logicalCorner switch
+                    {
+                        "tl" => "tr", // Top-Left camera → Top-Right motor
+                        "tr" => "br", // Top-Right camera → Bottom-Right motor
+                        "bl" => "tl", // Bottom-Left camera → Top-Left motor
+                        "br" => "bl", // Bottom-Right camera → Bottom-Left motor
+                        _ => logicalCorner
+                    };
+                    break;
+                case 3: // 180°
+                    physicalCorner = logicalCorner switch
+                    {
+                        "tl" => "br", // Top-Left camera → Bottom-Right motor
+                        "tr" => "bl", // Top-Right camera → Bottom-Left motor
+                        "bl" => "tr", // Bottom-Left camera → Top-Right motor
+                        "br" => "tl", // Bottom-Right camera → Top-Left motor
+                        _ => logicalCorner
+                    };
+                    break;
+                case 4: // 270° clockwise (or 90° counter-clockwise)
+                    physicalCorner = logicalCorner switch
+                    {
+                        "tl" => "bl", // Top-Left camera → Bottom-Left motor
+                        "tr" => "tl", // Top-Right camera → Top-Left motor
+                        "bl" => "br", // Bottom-Left camera → Bottom-Right motor
+                        "br" => "tr", // Bottom-Right camera → Top-Right motor
+                        _ => logicalCorner
+                    };
+                    break;
+            }
+
+            return $"{physicalCorner},{steps}";
+        }
+
+        /// <summary>
+        /// Maps a directional command based on device orientation.
+        /// Orientation 1 (0°): tp→tp, bt→bt, lt→lt, rt→rt
+        /// Orientation 2 (90°): tp→rt, bt→lt, lt→tp, rt→bt
+        /// Orientation 3 (180°): tp→bt, bt→tp, lt→rt, rt→lt
+        /// Orientation 4 (270°): tp→lt, bt→rt, lt→bt, rt→tp
+        /// </summary>
+        private string MapDirectionCommand(string logicalDirection, int steps)
+        {
+            var settings = EATSettings.Load();
+            int orientation = settings.Orientation;
+
+            string physicalDirection = logicalDirection; // Default: Orientation 1
+
+            switch (orientation)
+            {
+                case 1: // 0° - No rotation
+                    physicalDirection = logicalDirection;
+                    break;
+                case 2: // 90° clockwise
+                    physicalDirection = logicalDirection switch
+                    {
+                        "tp" => "rt", // Top camera → Right motor
+                        "bt" => "lt", // Bottom camera → Left motor
+                        "lt" => "tp", // Left camera → Top motor
+                        "rt" => "bt", // Right camera → Bottom motor
+                        _ => logicalDirection
+                    };
+                    break;
+                case 3: // 180°
+                    physicalDirection = logicalDirection switch
+                    {
+                        "tp" => "bt", // Top camera → Bottom motor
+                        "bt" => "tp", // Bottom camera → Top motor
+                        "lt" => "rt", // Left camera → Right motor
+                        "rt" => "lt", // Right camera → Left motor
+                        _ => logicalDirection
+                    };
+                    break;
+                case 4: // 270° clockwise (or 90° counter-clockwise)
+                    physicalDirection = logicalDirection switch
+                    {
+                        "tp" => "lt", // Top camera → Left motor
+                        "bt" => "rt", // Bottom camera → Right motor
+                        "lt" => "bt", // Left camera → Bottom motor
+                        "rt" => "tp", // Right camera → Top motor
+                        _ => logicalDirection
+                    };
+                    break;
+            }
+
+            return $"{physicalDirection},{steps}";
         }
 
         private async void DoCmd(string cmd)

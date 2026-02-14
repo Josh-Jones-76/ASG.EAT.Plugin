@@ -82,4 +82,13 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Plugin Assets -->
+    <Resource Include="Assets\ASG-Logo-white.png" />
+    <Resource Include="Assets\ASG-Logo-dark.png" />
+    <Resource Include="Assets\ASG-Logo.svg" />
+    <Resource Include="Assets\EAT-Inner.png" />
+    <Resource Include="Assets\EAT-Outer.png" />
+  </ItemGroup>
+
 </Project>
