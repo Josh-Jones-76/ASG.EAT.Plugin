@@ -4,37 +4,33 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
-             d:DesignWidth="440" d:DesignHeight="750"
+             d:DesignWidth="440" d:DesignHeight="850"
              Background="{DynamicResource BackgroundBrush}"
              Foreground="{DynamicResource PrimaryBrush}">
 
     <UserControl.Resources>
-        <Style x:Key="TiltBtn" TargetType="Button">
+        <!-- Tilt buttons: inherit NINA's button template, just override sizing -->
+        <Style x:Key="TiltBtn" TargetType="Button" BasedOn="{StaticResource StandardButton}">
             <Setter Property="MinWidth" Value="44"/>
             <Setter Property="MinHeight" Value="28"/>
             <Setter Property="Margin" Value="1"/>
             <Setter Property="Padding" Value="6,3"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource ButtonForegroundBrush}"/>
         </Style>
-        <Style x:Key="StepBox" TargetType="TextBox">
+        <!-- Step input boxes: inherit NINA's textbox template -->
+        <Style x:Key="StepBox" TargetType="TextBox" BasedOn="{StaticResource StandardTextbox}">
             <Setter Property="Width" Value="40"/>
             <Setter Property="Height" Value="22"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Margin" Value="1"/>
-            <Setter Property="Background" Value="{DynamicResource SecondaryBackgroundBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         </Style>
-        <Style x:Key="ActionBtn" TargetType="Button">
+        <!-- Action buttons -->
+        <Style x:Key="ActionBtn" TargetType="Button" BasedOn="{StaticResource StandardButton}">
             <Setter Property="Padding" Value="10,4"/>
             <Setter Property="Margin" Value="4,2"/>
-            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource ButtonForegroundBrush}"/>
         </Style>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     </UserControl.Resources>
@@ -42,9 +38,9 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="6">
         <StackPanel>
 
-            <!-- ═══ Connection ═══ -->
-            <Border BorderBrush="{DynamicResource BorderBrush}" 
-                    BorderThickness="1" CornerRadius="4" 
+            <!-- Connection -->
+            <Border BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="4"
                     Padding="8" Margin="0,0,0,6">
                 <StackPanel>
                     <!-- Status LED + text -->
@@ -53,18 +49,31 @@
                                  Stroke="{DynamicResource BorderBrush}" StrokeThickness="1">
                             <Ellipse.Style>
                                 <Style TargetType="Ellipse">
+                                    <!-- Default: gray (disconnected) -->
                                     <Setter Property="Fill" Value="#555555"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                        <!-- Connected + idle = green -->
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsConnected}" Value="True"/>
+                                                <Condition Binding="{Binding IsMoving}" Value="False"/>
+                                            </MultiDataTrigger.Conditions>
                                             <Setter Property="Fill" Value="#22CC22"/>
-                                        </DataTrigger>
+                                        </MultiDataTrigger>
+                                        <!-- Connected + moving = red -->
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsConnected}" Value="True"/>
+                                                <Condition Binding="{Binding IsMoving}" Value="True"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Fill" Value="#DD2222"/>
+                                        </MultiDataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Ellipse.Style>
                         </Ellipse>
-                        <TextBlock Text="{Binding ConnectionStatus}" 
-                                   VerticalAlignment="Center" FontWeight="SemiBold" FontSize="11"
-                                   Foreground="{DynamicResource PrimaryBrush}"/>
+                        <TextBlock Text="{Binding ConnectionStatus}"
+                                   VerticalAlignment="Center" FontWeight="SemiBold" FontSize="11"/>
                     </StackPanel>
 
                     <!-- Port row -->
@@ -74,18 +83,16 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Port:" VerticalAlignment="Center" Margin="0,0,6,0"
-                                   Foreground="{DynamicResource PrimaryBrush}"/>
-                        <ComboBox Grid.Column="1" 
-                                  ItemsSource="{Binding AvailablePorts}" 
+                        <TextBlock Text="Port:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox Grid.Column="1"
+                                  ItemsSource="{Binding AvailablePorts}"
                                   SelectedItem="{Binding SelectedPort, Mode=TwoWay}"
                                   Margin="0,0,4,0"/>
-                        <Button Grid.Column="2" Content="⟳" 
+                        <Button Grid.Column="2" Content="&#x27f3;"
                                 Command="{Binding RefreshPortsCommand}"
                                 ToolTip="Refresh COM ports"
                                 Padding="8,4" FontSize="12"
-                                Background="{DynamicResource ButtonBackgroundBrush}"
-                                Foreground="{DynamicResource ButtonForegroundBrush}"/>
+                                Style="{StaticResource StandardButton}"/>
                     </Grid>
 
                     <!-- Baud row -->
@@ -94,10 +101,9 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Baud:" VerticalAlignment="Center" Margin="0,0,6,0"
-                                   Foreground="{DynamicResource PrimaryBrush}"/>
-                        <ComboBox Grid.Column="1" 
-                                  ItemsSource="{Binding BaudRates}" 
+                        <TextBlock Text="Baud:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox Grid.Column="1"
+                                  ItemsSource="{Binding BaudRates}"
                                   SelectedItem="{Binding SelectedBaud, Mode=TwoWay}"/>
                     </Grid>
 
@@ -105,32 +111,71 @@
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                         <Button Content="Connect" Command="{Binding ConnectCommand}"
                                 Padding="16,6" Margin="4,0" FontWeight="SemiBold"
-                                Background="{DynamicResource ButtonBackgroundBrush}"
-                                Foreground="{DynamicResource ButtonForegroundBrush}"/>
+                                Style="{StaticResource StandardButton}"/>
                         <Button Content="Disconnect" Command="{Binding DisconnectCommand}"
                                 Padding="16,6" Margin="4,0" FontWeight="SemiBold"
-                                Background="{DynamicResource ButtonBackgroundBrush}"
-                                Foreground="{DynamicResource ButtonForegroundBrush}"/>
+                                Style="{StaticResource StandardButton}"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
 
-            <!-- ═══ Tilt Control — Combined 3×3 Grid ═══ 
-                 Layout:
-                   ◤TL  |  ▲Top  |  TR◥
-                   ◄Left |  TILT  |  Right►
-                   ◣BL  |  ▼Bot  |  BR◢
-                 
-                 Corners = 2-motor paired tilt (tl, tr, bl, br)
-                 Edges   = 4-motor directional tilt (tp, bt, lt, rt)
-            -->
-            <Border BorderBrush="{DynamicResource BorderBrush}" 
-                    BorderThickness="1" CornerRadius="4" 
+            <!-- Current Positions Display -->
+            <Border BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="4"
                     Padding="8" Margin="0,0,0,6">
                 <StackPanel>
-                    <TextBlock Text="Tilt Control" FontWeight="SemiBold" 
-                               FontSize="12" Margin="0,0,0,6"
-                               Foreground="{DynamicResource PrimaryBrush}"/>
+                    <TextBlock Text="Current Positions" FontWeight="SemiBold"
+                               FontSize="12" Margin="0,0,0,6"/>
+                    <Grid HorizontalAlignment="Center">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="24"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- TL -->
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="TL:" FontSize="11"
+                                   VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding PositionTL}"
+                                   FontSize="11" FontFamily="Consolas" VerticalAlignment="Center"
+                                   MinWidth="40"/>
+                        <!-- TR -->
+                        <TextBlock Grid.Row="0" Grid.Column="4" Text="TR:" FontSize="11"
+                                   VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Row="0" Grid.Column="6" Text="{Binding PositionTR}"
+                                   FontSize="11" FontFamily="Consolas" VerticalAlignment="Center"
+                                   MinWidth="40"/>
+                        <!-- BL -->
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="BL:" FontSize="11"
+                                   VerticalAlignment="Center" Margin="0,4,0,0" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding PositionBL}"
+                                   FontSize="11" FontFamily="Consolas" VerticalAlignment="Center"
+                                   Margin="0,4,0,0" MinWidth="40"/>
+                        <!-- BR -->
+                        <TextBlock Grid.Row="1" Grid.Column="4" Text="BR:" FontSize="11"
+                                   VerticalAlignment="Center" Margin="0,4,0,0" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Row="1" Grid.Column="6" Text="{Binding PositionBR}"
+                                   FontSize="11" FontFamily="Consolas" VerticalAlignment="Center"
+                                   Margin="0,4,0,0" MinWidth="40"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Tilt Control - Combined 3x3 Grid -->
+            <Border BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="4"
+                    Padding="8" Margin="0,0,0,6">
+                <StackPanel>
+                    <TextBlock Text="Tilt Control" FontWeight="SemiBold"
+                               FontSize="12" Margin="0,0,0,6"/>
 
                     <Grid HorizontalAlignment="Center">
                         <Grid.RowDefinitions>
@@ -146,89 +191,85 @@
 
                         <!-- Row 0: TL | Top | TR -->
                         <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="2">
-                            <Button Content="◤ TL" Command="{Binding MoveTopLeftCommand}" Style="{StaticResource TiltBtn}"/>
+                            <Button Content="&#x25E4; TL" Command="{Binding MoveTopLeftCommand}" Style="{StaticResource TiltBtn}"/>
                             <TextBox Text="{Binding TopLeftSteps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource StepBox}"/>
                         </StackPanel>
 
                         <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="2">
-                            <Button Content="▲ Top" Command="{Binding MoveTopCommand}" Style="{StaticResource TiltBtn}"/>
+                            <Button Content="&#x25B2; Top" Command="{Binding MoveTopCommand}" Style="{StaticResource TiltBtn}"/>
                             <TextBox Text="{Binding TopSteps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource StepBox}"/>
                         </StackPanel>
 
                         <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Margin="2">
                             <TextBox Text="{Binding TopRightSteps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource StepBox}"/>
-                            <Button Content="TR ◥" Command="{Binding MoveTopRightCommand}" Style="{StaticResource TiltBtn}"/>
+                            <Button Content="TR &#x25E5;" Command="{Binding MoveTopRightCommand}" Style="{StaticResource TiltBtn}"/>
                         </StackPanel>
 
                         <!-- Row 1: Left | TILT | Right -->
                         <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="2">
-                            <Button Content="◄ Left" Command="{Binding MoveLeftCommand}" Style="{StaticResource TiltBtn}"/>
+                            <Button Content="&#x25C4; Left" Command="{Binding MoveLeftCommand}" Style="{StaticResource TiltBtn}"/>
                             <TextBox Text="{Binding LeftSteps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource StepBox}"/>
                         </StackPanel>
 
-                        <Border Grid.Row="1" Grid.Column="1" 
+                        <Border Grid.Row="1" Grid.Column="1"
                                 Background="{DynamicResource SecondaryBackgroundBrush}"
                                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                                 CornerRadius="4" Padding="14,10" Margin="4">
                             <TextBlock Text="TILT" FontWeight="Bold" FontSize="11"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource PrimaryBrush}"/>
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
 
                         <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="2">
                             <TextBox Text="{Binding RightSteps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource StepBox}"/>
-                            <Button Content="Right ►" Command="{Binding MoveRightCommand}" Style="{StaticResource TiltBtn}"/>
+                            <Button Content="Right &#x25BA;" Command="{Binding MoveRightCommand}" Style="{StaticResource TiltBtn}"/>
                         </StackPanel>
 
                         <!-- Row 2: BL | Bottom | BR -->
                         <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="2">
-                            <Button Content="◣ BL" Command="{Binding MoveBottomLeftCommand}" Style="{StaticResource TiltBtn}"/>
+                            <Button Content="&#x25E3; BL" Command="{Binding MoveBottomLeftCommand}" Style="{StaticResource TiltBtn}"/>
                             <TextBox Text="{Binding BottomLeftSteps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource StepBox}"/>
                         </StackPanel>
 
                         <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="2">
-                            <Button Content="▼ Bot" Command="{Binding MoveBottomCommand}" Style="{StaticResource TiltBtn}"/>
+                            <Button Content="&#x25BC; Bot" Command="{Binding MoveBottomCommand}" Style="{StaticResource TiltBtn}"/>
                             <TextBox Text="{Binding BottomSteps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource StepBox}"/>
                         </StackPanel>
 
                         <StackPanel Grid.Row="2" Grid.Column="2" Orientation="Horizontal" Margin="2">
                             <TextBox Text="{Binding BottomRightSteps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource StepBox}"/>
-                            <Button Content="BR ◢" Command="{Binding MoveBottomRightCommand}" Style="{StaticResource TiltBtn}"/>
+                            <Button Content="BR &#x25E2;" Command="{Binding MoveBottomRightCommand}" Style="{StaticResource TiltBtn}"/>
                         </StackPanel>
                     </Grid>
 
                     <!-- Legend -->
                     <TextBlock Text="Corners = 2-motor paired  |  Edges = 4-motor directional"
-                               FontSize="9" Opacity="0.6" HorizontalAlignment="Center" Margin="0,6,0,0"
-                               Foreground="{DynamicResource PrimaryBrush}"/>
+                               FontSize="9" Opacity="0.6" HorizontalAlignment="Center" Margin="0,6,0,0"/>
                 </StackPanel>
             </Border>
 
-            <!-- ═══ Backfocus ═══ -->
-            <Border BorderBrush="{DynamicResource BorderBrush}" 
-                    BorderThickness="1" CornerRadius="4" 
+            <!-- Backfocus -->
+            <Border BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="4"
                     Padding="8" Margin="0,0,0,6">
                 <StackPanel>
-                    <TextBlock Text="Backfocus (All Motors)" FontWeight="SemiBold" 
-                               FontSize="12" Margin="0,0,0,6"
-                               Foreground="{DynamicResource PrimaryBrush}"/>
+                    <TextBlock Text="Backfocus (All Motors)" FontWeight="SemiBold"
+                               FontSize="12" Margin="0,0,0,6"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                        <Button Content="◄ Out" Command="{Binding BackfocusOutCommand}" Style="{StaticResource TiltBtn}" MinWidth="55"/>
-                        <TextBox Text="{Binding BackfocusSteps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
+                        <Button Content="&#x25C4; Out" Command="{Binding BackfocusOutCommand}" Style="{StaticResource TiltBtn}" MinWidth="55"/>
+                        <TextBox Text="{Binding BackfocusSteps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  Style="{StaticResource StepBox}" Width="55"/>
-                        <Button Content="In ►" Command="{Binding BackfocusInCommand}" Style="{StaticResource TiltBtn}" MinWidth="55"/>
+                        <Button Content="In &#x25BA;" Command="{Binding BackfocusInCommand}" Style="{StaticResource TiltBtn}" MinWidth="55"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
 
-            <!-- ═══ Utility ═══ -->
-            <Border BorderBrush="{DynamicResource BorderBrush}" 
-                    BorderThickness="1" CornerRadius="4" 
+            <!-- Utility -->
+            <Border BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="4"
                     Padding="8" Margin="0,0,0,6">
                 <StackPanel>
-                    <TextBlock Text="Utility" FontWeight="SemiBold" 
-                               FontSize="12" Margin="0,0,0,6"
-                               Foreground="{DynamicResource PrimaryBrush}"/>
+                    <TextBlock Text="Utility" FontWeight="SemiBold"
+                               FontSize="12" Margin="0,0,0,6"/>
                     <WrapPanel HorizontalAlignment="Center">
                         <Button Content="Zero All" Command="{Binding ZeroAllCommand}" Style="{StaticResource ActionBtn}"/>
                         <Button Content="Get Positions" Command="{Binding GetPositionsCommand}" Style="{StaticResource ActionBtn}"/>
@@ -237,37 +278,31 @@
                 </StackPanel>
             </Border>
 
-            <!-- ═══ Raw Command ═══ -->
-            <Border BorderBrush="{DynamicResource BorderBrush}" 
-                    BorderThickness="1" CornerRadius="4" 
+            <!-- Raw Command -->
+            <Border BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="4"
                     Padding="8" Margin="0,0,0,6">
                 <StackPanel>
-                    <TextBlock Text="Raw Command" FontWeight="SemiBold" 
-                               FontSize="12" Margin="0,0,0,6"
-                               Foreground="{DynamicResource PrimaryBrush}"/>
+                    <TextBlock Text="Raw Command" FontWeight="SemiBold"
+                               FontSize="12" Margin="0,0,0,6"/>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0" 
+                        <TextBox Grid.Column="0"
                                  Text="{Binding RawCommandText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  FontFamily="Consolas" FontSize="11"
-                                 Padding="4,2" Margin="0,0,4,0"
-                                 Background="{DynamicResource SecondaryBackgroundBrush}"
-                                 Foreground="{DynamicResource PrimaryBrush}"
-                                 BorderBrush="{DynamicResource BorderBrush}"/>
+                                 Padding="4,2" Margin="0,0,4,0"/>
                         <Button Grid.Column="1" Content="Send" Command="{Binding SendRawCommand}"
-                                Padding="12,4"
-                                Background="{DynamicResource ButtonBackgroundBrush}"
-                                Foreground="{DynamicResource ButtonForegroundBrush}"/>
+                                Padding="12,4" Style="{StaticResource StandardButton}"/>
                     </Grid>
                 </StackPanel>
             </Border>
 
-            <!-- ═══ Activity Log ═══ -->
-            <Border BorderBrush="{DynamicResource BorderBrush}" 
-                    BorderThickness="1" CornerRadius="4" 
+            <!-- Activity Log -->
+            <Border BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="4"
                     Padding="8" Margin="0,0,0,6">
                 <StackPanel>
                     <Grid Margin="0,0,0,6">
@@ -276,14 +311,11 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="Activity Log" FontWeight="SemiBold" FontSize="12"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource PrimaryBrush}"/>
+                                   VerticalAlignment="Center"/>
                         <Button Grid.Column="1" Content="Clear" Command="{Binding ClearLogCommand}"
-                                Padding="8,2"
-                                Background="{DynamicResource ButtonBackgroundBrush}"
-                                Foreground="{DynamicResource ButtonForegroundBrush}"/>
+                                Padding="8,2" Style="{StaticResource StandardButton}"/>
                     </Grid>
-                    <ListBox ItemsSource="{Binding ActivityLog}" 
+                    <ListBox ItemsSource="{Binding ActivityLog}"
                              Height="160"
                              FontFamily="Consolas" FontSize="10"
                              Background="{DynamicResource SecondaryBackgroundBrush}"
@@ -294,8 +326,7 @@
                              x:Name="ActivityLogListBox">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding}" TextWrapping="NoWrap"
-                                           Foreground="{DynamicResource PrimaryBrush}"/>
+                                <TextBlock Text="{Binding}" TextWrapping="NoWrap"/>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>

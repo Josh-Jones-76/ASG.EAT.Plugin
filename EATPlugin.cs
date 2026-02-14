@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.ComponentModel.Composition;
@@ -98,29 +99,29 @@ namespace ASG.EAT.Plugin
             RefreshPortsCommand = new RelayCommand(_ => DoRefreshPorts());
 
             // ── Directional tilt (4-motor): tp, bt, lt, rt ────────────
-            MoveTopCommand = new RelayCommand(_ => DoCmd($"tp,{TopSteps}"), _ => IsConnected);
-            MoveBottomCommand = new RelayCommand(_ => DoCmd($"bt,{BottomSteps}"), _ => IsConnected);
-            MoveLeftCommand = new RelayCommand(_ => DoCmd($"lt,{LeftSteps}"), _ => IsConnected);
-            MoveRightCommand = new RelayCommand(_ => DoCmd($"rt,{RightSteps}"), _ => IsConnected);
+            MoveTopCommand = new RelayCommand(_ => DoCmd($"tp,{TopSteps}"), _ => IsConnected && !IsMoving);
+            MoveBottomCommand = new RelayCommand(_ => DoCmd($"bt,{BottomSteps}"), _ => IsConnected && !IsMoving);
+            MoveLeftCommand = new RelayCommand(_ => DoCmd($"lt,{LeftSteps}"), _ => IsConnected && !IsMoving);
+            MoveRightCommand = new RelayCommand(_ => DoCmd($"rt,{RightSteps}"), _ => IsConnected && !IsMoving);
 
             // ── Corner tilt (2-motor paired): tl, tr, bl, br ──────────
-            MoveTopLeftCommand = new RelayCommand(_ => DoCmd($"tl,{TopLeftSteps}"), _ => IsConnected);
-            MoveTopRightCommand = new RelayCommand(_ => DoCmd($"tr,{TopRightSteps}"), _ => IsConnected);
-            MoveBottomLeftCommand = new RelayCommand(_ => DoCmd($"bl,{BottomLeftSteps}"), _ => IsConnected);
-            MoveBottomRightCommand = new RelayCommand(_ => DoCmd($"br,{BottomRightSteps}"), _ => IsConnected);
+            MoveTopLeftCommand = new RelayCommand(_ => DoCmd($"tl,{TopLeftSteps}"), _ => IsConnected && !IsMoving);
+            MoveTopRightCommand = new RelayCommand(_ => DoCmd($"tr,{TopRightSteps}"), _ => IsConnected && !IsMoving);
+            MoveBottomLeftCommand = new RelayCommand(_ => DoCmd($"bl,{BottomLeftSteps}"), _ => IsConnected && !IsMoving);
+            MoveBottomRightCommand = new RelayCommand(_ => DoCmd($"br,{BottomRightSteps}"), _ => IsConnected && !IsMoving);
 
             // ── Backfocus (all 4 motors): bf ───────────────────────────
-            BackfocusInCommand = new RelayCommand(_ => DoCmd($"bf,{BackfocusSteps}"), _ => IsConnected);
-            BackfocusOutCommand = new RelayCommand(_ => DoCmd($"bf,{-BackfocusSteps}"), _ => IsConnected);
+            BackfocusInCommand = new RelayCommand(_ => DoCmd($"bf,{BackfocusSteps}"), _ => IsConnected && !IsMoving);
+            BackfocusOutCommand = new RelayCommand(_ => DoCmd($"bf,{-BackfocusSteps}"), _ => IsConnected && !IsMoving);
 
             // ── Utility: zr, cp, up ────────────────────────────────────
-            ZeroAllCommand = new RelayCommand(_ => DoCmd("zr"), _ => IsConnected);
-            GetPositionsCommand = new RelayCommand(_ => DoCmd("cp"), _ => IsConnected);
-            SaveEEPROMCommand = new RelayCommand(_ => DoCmd("up"), _ => IsConnected);
+            ZeroAllCommand = new RelayCommand(_ => DoCmd("zr"), _ => IsConnected && !IsMoving);
+            GetPositionsCommand = new RelayCommand(_ => DoCmd("cp"), _ => IsConnected && !IsMoving);
+            SaveEEPROMCommand = new RelayCommand(_ => DoCmd("up"), _ => IsConnected && !IsMoving);
 
             // ── Raw command + log ──────────────────────────────────────
             SendRawCommand = new RelayCommand(_ => DoSendRaw(),
-                _ => IsConnected && !string.IsNullOrWhiteSpace(RawCommandText));
+                _ => IsConnected && !string.IsNullOrWhiteSpace(RawCommandText) && !IsMoving);
             ClearLogCommand = new RelayCommand(_ =>
             {
                 ActivityLog.Clear();
@@ -175,6 +176,33 @@ namespace ASG.EAT.Plugin
         public string ConnectionStatus => IsConnected
             ? $"Connected — {_serial.ConnectedPort} @ {_serial.ConnectedBaud}"
             : "Disconnected";
+
+        // ────────────────────────────────────────────────────────────────
+        //  Movement state — drives the LED color (gray/green/red)
+        // ────────────────────────────────────────────────────────────────
+
+        private bool _isMoving;
+        public bool IsMoving
+        {
+            get => _isMoving;
+            set { _isMoving = value; RaisePropertyChanged(); RaisePropertyChanged(nameof(ConnectionStatus)); }
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        //  Current position properties (read from Arduino responses)
+        // ────────────────────────────────────────────────────────────────
+
+        private string _positionTL = "—";
+        public string PositionTL { get => _positionTL; set { _positionTL = value; RaisePropertyChanged(); } }
+
+        private string _positionTR = "—";
+        public string PositionTR { get => _positionTR; set { _positionTR = value; RaisePropertyChanged(); } }
+
+        private string _positionBL = "—";
+        public string PositionBL { get => _positionBL; set { _positionBL = value; RaisePropertyChanged(); } }
+
+        private string _positionBR = "—";
+        public string PositionBR { get => _positionBR; set { _positionBR = value; RaisePropertyChanged(); } }
 
         // ────────────────────────────────────────────────────────────────
         //  Step size properties
@@ -293,12 +321,15 @@ namespace ASG.EAT.Plugin
 
             if (ok)
             {
-                AppendLog($"✓ Connected to {SelectedPort}");
+                AppendLog($"Connected to {SelectedPort}");
                 _settings.Save();
+
+                // Request current positions after connecting
+                DoCmd("cp");
             }
             else
             {
-                AppendLog("✗ Connection failed. Check port and device.");
+                AppendLog("Connection failed. Check port and device.");
             }
         }
 
@@ -306,24 +337,37 @@ namespace ASG.EAT.Plugin
         {
             _serial.Disconnect();
             AppendLog("Disconnected.");
+            // Reset positions on disconnect
+            PositionTL = "—";
+            PositionTR = "—";
+            PositionBL = "—";
+            PositionBR = "—";
         }
 
         private async void DoCmd(string cmd)
         {
-            AppendLog($"→ {cmd}");
+            AppendLog($">> {cmd}");
+            IsMoving = true;
             IsBusy = true;
             try
             {
-                string response = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
-                LastResponse = response;
-                AppendLog($"← {response}");
+                List<string> responseLines = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
+                foreach (var line in responseLines)
+                {
+                    AppendLog($"<< {line}");
+                }
+                LastResponse = string.Join(" | ", responseLines);
+
+                // Parse the response lines for position data and movement status
+                ParseResponseLines(responseLines);
             }
             catch (Exception ex)
             {
-                AppendLog($"⚠ {ex.Message}");
+                AppendLog($"!! {ex.Message}");
             }
             finally
             {
+                IsMoving = false;
                 IsBusy = false;
             }
         }
@@ -333,24 +377,90 @@ namespace ASG.EAT.Plugin
             string cmd = RawCommandText?.Trim();
             if (string.IsNullOrEmpty(cmd)) return;
 
-            AppendLog($"→ {cmd}");
+            AppendLog($">> {cmd}");
+            IsMoving = true;
             IsBusy = true;
             try
             {
-                string response = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
-                LastResponse = response;
-                AppendLog($"← {response}");
+                List<string> responseLines = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
+                foreach (var line in responseLines)
+                {
+                    AppendLog($"<< {line}");
+                }
+                LastResponse = string.Join(" | ", responseLines);
+                ParseResponseLines(responseLines);
             }
             catch (Exception ex)
             {
-                AppendLog($"⚠ {ex.Message}");
+                AppendLog($"!! {ex.Message}");
             }
             finally
             {
+                IsMoving = false;
                 IsBusy = false;
                 RawCommandText = string.Empty;
             }
         }
+
+        // ────────────────────────────────────────────────────────────────
+        //  Response parsing — extracts position data from Arduino output
+        //
+        //  Arduino sends position data in this format:
+        //    ***Get Current Positions***
+        //    <TL value>
+        //    <TR value>
+        //    <BL value>
+        //    <BR value>
+        //    ***End Current Positions***
+        // ────────────────────────────────────────────────────────────────
+
+        private void ParseResponseLines(List<string> lines)
+        {
+            bool inPositionBlock = false;
+            var positionValues = new List<string>();
+
+            foreach (var line in lines)
+            {
+                if (line.Contains("***Get Current Positions***"))
+                {
+                    inPositionBlock = true;
+                    positionValues.Clear();
+                    continue;
+                }
+
+                if (line.Contains("***End Current Positions***"))
+                {
+                    inPositionBlock = false;
+
+                    // We expect exactly 4 values: TL, TR, BL, BR
+                    if (positionValues.Count >= 4)
+                    {
+                        Application.Current?.Dispatcher?.Invoke(() =>
+                        {
+                            PositionTL = positionValues[0];
+                            PositionTR = positionValues[1];
+                            PositionBL = positionValues[2];
+                            PositionBR = positionValues[3];
+                        });
+                    }
+                    continue;
+                }
+
+                if (inPositionBlock)
+                {
+                    // Each line inside the position block is a numeric value
+                    string trimmed = line.Trim();
+                    if (!string.IsNullOrEmpty(trimmed))
+                    {
+                        positionValues.Add(trimmed);
+                    }
+                }
+            }
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        //  Activity log
+        // ────────────────────────────────────────────────────────────────
 
         private void AppendLog(string message)
         {

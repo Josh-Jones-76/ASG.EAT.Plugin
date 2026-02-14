@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -12,30 +13,22 @@ namespace ASG.EAT.Plugin.ViewModels
 {
     /// <summary>
     /// ViewModel for the ASG EAT control panel docked inside the NINA Imaging tab.
-    /// 
-    /// Provides:
-    ///   • Connect / Disconnect to the serial device
-    ///   • Directional tilt buttons (Top, Bottom, Left, Right) — moves 4 motors
-    ///   • Corner tilt buttons (TL, TR, BL, BR) — moves 2 motors in opposition
-    ///   • Backfocus control — moves all 4 motors in same direction
-    ///   • Utility commands (Zero, Get Positions, Save EEPROM)
-    ///   • A scrolling activity / response log
     ///
-    /// Arduino Firmware Command Reference (V7):
-    ///   Corner:  tr, tl, br, bl  (paired tilt)
-    ///   Direction: tp, bt, rt, lt  (quad move)
-    ///   Backfocus: bf              (all motors same direction)
-    ///   Utility: zr, cp, ep, up
-    ///   Config:  cA, cB, cC, or
+    /// Provides:
+    ///   - Connect / Disconnect to the serial device
+    ///   - Directional tilt buttons (Top, Bottom, Left, Right) — moves 4 motors
+    ///   - Corner tilt buttons (TL, TR, BL, BR) — moves 2 motors in opposition
+    ///   - Backfocus control — moves all 4 motors in same direction
+    ///   - Utility commands (Zero, Get Positions, Save EEPROM)
+    ///   - A scrolling activity / response log
+    ///
+    /// Note: The primary ViewModel used by NINA is EATDockablePanel in EATPlugin.cs.
+    /// This class is kept as an alternative standalone ViewModel.
     /// </summary>
     public class EATControlPanelViewModel : INotifyPropertyChanged, IDisposable
     {
         private readonly EATSerialService _serial;
         private readonly EATSettings _settings;
-
-        // ────────────────────────────────────────────────────────────────
-        //  Constructor
-        // ────────────────────────────────────────────────────────────────
 
         public EATControlPanelViewModel(EATSettings settings)
         {
@@ -53,7 +46,7 @@ namespace ASG.EAT.Plugin.ViewModels
 
             _serial.ErrorOccurred += (s, msg) =>
             {
-                AppendLog($"⚠ {msg}");
+                AppendLog($"!! {msg}");
             };
 
             // Connection commands
@@ -61,23 +54,23 @@ namespace ASG.EAT.Plugin.ViewModels
             DisconnectCommand = new RelayCommand(_ => DoDisconnect(), _ => IsConnected);
             RefreshPortsCommand = new RelayCommand(_ => RefreshPortList());
 
-            // Directional tilt commands (4 motors) — matches Arduino: tp, bt, lt, rt
+            // Directional tilt commands (4 motors)
             MoveTopCommand = new RelayCommand(_ => DoQuickCommand($"tp,{TopSteps}"), _ => IsConnected);
             MoveBottomCommand = new RelayCommand(_ => DoQuickCommand($"bt,{BottomSteps}"), _ => IsConnected);
             MoveLeftCommand = new RelayCommand(_ => DoQuickCommand($"lt,{LeftSteps}"), _ => IsConnected);
             MoveRightCommand = new RelayCommand(_ => DoQuickCommand($"rt,{RightSteps}"), _ => IsConnected);
 
-            // Corner tilt commands (2 motors in opposition) — matches Arduino: tl, tr, bl, br
+            // Corner tilt commands (2 motors in opposition)
             MoveTopLeftCommand = new RelayCommand(_ => DoQuickCommand($"tl,{TopLeftSteps}"), _ => IsConnected);
             MoveTopRightCommand = new RelayCommand(_ => DoQuickCommand($"tr,{TopRightSteps}"), _ => IsConnected);
             MoveBottomLeftCommand = new RelayCommand(_ => DoQuickCommand($"bl,{BottomLeftSteps}"), _ => IsConnected);
             MoveBottomRightCommand = new RelayCommand(_ => DoQuickCommand($"br,{BottomRightSteps}"), _ => IsConnected);
 
-            // Backfocus commands — matches Arduino: bf
+            // Backfocus commands
             BackfocusInCommand = new RelayCommand(_ => DoQuickCommand($"bf,{BackfocusSteps}"), _ => IsConnected);
             BackfocusOutCommand = new RelayCommand(_ => DoQuickCommand($"bf,{-BackfocusSteps}"), _ => IsConnected);
 
-            // Utility commands — matches Arduino: zr, cp, up
+            // Utility commands
             ZeroAllCommand = new RelayCommand(_ => DoQuickCommand("zr"), _ => IsConnected);
             GetPositionsCommand = new RelayCommand(_ => DoQuickCommand("cp"), _ => IsConnected);
             SaveEEPROMCommand = new RelayCommand(_ => DoQuickCommand("up"), _ => IsConnected);
@@ -149,108 +142,62 @@ namespace ASG.EAT.Plugin.ViewModels
             set { _isBusy = value; OnPropertyChanged(); }
         }
 
-        // ── Directional step values ────────────────────────────────────
+        // ── Step values ──────────────────────────────────────────────────
 
         private int _topSteps = 25;
-        public int TopSteps
-        {
-            get => _topSteps;
-            set { _topSteps = value; OnPropertyChanged(); }
-        }
+        public int TopSteps { get => _topSteps; set { _topSteps = value; OnPropertyChanged(); } }
 
         private int _bottomSteps = 25;
-        public int BottomSteps
-        {
-            get => _bottomSteps;
-            set { _bottomSteps = value; OnPropertyChanged(); }
-        }
+        public int BottomSteps { get => _bottomSteps; set { _bottomSteps = value; OnPropertyChanged(); } }
 
         private int _leftSteps = 25;
-        public int LeftSteps
-        {
-            get => _leftSteps;
-            set { _leftSteps = value; OnPropertyChanged(); }
-        }
+        public int LeftSteps { get => _leftSteps; set { _leftSteps = value; OnPropertyChanged(); } }
 
         private int _rightSteps = 25;
-        public int RightSteps
-        {
-            get => _rightSteps;
-            set { _rightSteps = value; OnPropertyChanged(); }
-        }
-
-        // ── Corner step values ─────────────────────────────────────────
+        public int RightSteps { get => _rightSteps; set { _rightSteps = value; OnPropertyChanged(); } }
 
         private int _topLeftSteps = 25;
-        public int TopLeftSteps
-        {
-            get => _topLeftSteps;
-            set { _topLeftSteps = value; OnPropertyChanged(); }
-        }
+        public int TopLeftSteps { get => _topLeftSteps; set { _topLeftSteps = value; OnPropertyChanged(); } }
 
         private int _topRightSteps = 25;
-        public int TopRightSteps
-        {
-            get => _topRightSteps;
-            set { _topRightSteps = value; OnPropertyChanged(); }
-        }
+        public int TopRightSteps { get => _topRightSteps; set { _topRightSteps = value; OnPropertyChanged(); } }
 
         private int _bottomLeftSteps = 25;
-        public int BottomLeftSteps
-        {
-            get => _bottomLeftSteps;
-            set { _bottomLeftSteps = value; OnPropertyChanged(); }
-        }
+        public int BottomLeftSteps { get => _bottomLeftSteps; set { _bottomLeftSteps = value; OnPropertyChanged(); } }
 
         private int _bottomRightSteps = 25;
-        public int BottomRightSteps
-        {
-            get => _bottomRightSteps;
-            set { _bottomRightSteps = value; OnPropertyChanged(); }
-        }
-
-        // ── Backfocus step value ───────────────────────────────────────
+        public int BottomRightSteps { get => _bottomRightSteps; set { _bottomRightSteps = value; OnPropertyChanged(); } }
 
         private int _backfocusSteps = 25;
-        public int BackfocusSteps
-        {
-            get => _backfocusSteps;
-            set { _backfocusSteps = value; OnPropertyChanged(); }
-        }
+        public int BackfocusSteps { get => _backfocusSteps; set { _backfocusSteps = value; OnPropertyChanged(); } }
 
         public ObservableCollection<string> ActivityLog { get; } = new ObservableCollection<string>();
 
         // ────────────────────────────────────────────────────────────────
-        //  Commands (ICommand)
+        //  Commands
         // ────────────────────────────────────────────────────────────────
 
-        // Connection
         public ICommand ConnectCommand { get; }
         public ICommand DisconnectCommand { get; }
         public ICommand RefreshPortsCommand { get; }
 
-        // Directional moves (4-motor)
         public ICommand MoveTopCommand { get; }
         public ICommand MoveBottomCommand { get; }
         public ICommand MoveLeftCommand { get; }
         public ICommand MoveRightCommand { get; }
 
-        // Corner moves (2-motor paired)
         public ICommand MoveTopLeftCommand { get; }
         public ICommand MoveTopRightCommand { get; }
         public ICommand MoveBottomLeftCommand { get; }
         public ICommand MoveBottomRightCommand { get; }
 
-        // Backfocus
         public ICommand BackfocusInCommand { get; }
         public ICommand BackfocusOutCommand { get; }
 
-        // Utility
         public ICommand ZeroAllCommand { get; }
         public ICommand GetPositionsCommand { get; }
         public ICommand SaveEEPROMCommand { get; }
 
-        // Raw command + log
         public ICommand SendRawCommand { get; }
         public ICommand ClearLogCommand { get; }
 
@@ -271,12 +218,12 @@ namespace ASG.EAT.Plugin.ViewModels
 
             if (ok)
             {
-                AppendLog("✓ Connected successfully.");
+                AppendLog("Connected successfully.");
                 _settings.Save();
             }
             else
             {
-                AppendLog("✗ Connection failed. Check port and device.");
+                AppendLog("Connection failed. Check port and device.");
             }
         }
 
@@ -291,18 +238,21 @@ namespace ASG.EAT.Plugin.ViewModels
             string cmd = RawCommandText?.Trim();
             if (string.IsNullOrEmpty(cmd)) return;
 
-            AppendLog($"→ {cmd}");
+            AppendLog($">> {cmd}");
             IsBusy = true;
 
             try
             {
-                string response = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
-                LastResponse = response;
-                AppendLog($"← {response}");
+                List<string> responseLines = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
+                LastResponse = string.Join(" | ", responseLines);
+                foreach (var line in responseLines)
+                {
+                    AppendLog($"<< {line}");
+                }
             }
             catch (Exception ex)
             {
-                AppendLog($"⚠ Error: {ex.Message}");
+                AppendLog($"!! Error: {ex.Message}");
             }
             finally
             {
@@ -313,18 +263,21 @@ namespace ASG.EAT.Plugin.ViewModels
 
         private async void DoQuickCommand(string cmd)
         {
-            AppendLog($"→ {cmd}");
+            AppendLog($">> {cmd}");
             IsBusy = true;
 
             try
             {
-                string response = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
-                LastResponse = response;
-                AppendLog($"← {response}");
+                List<string> responseLines = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
+                LastResponse = string.Join(" | ", responseLines);
+                foreach (var line in responseLines)
+                {
+                    AppendLog($"<< {line}");
+                }
             }
             catch (Exception ex)
             {
-                AppendLog($"⚠ Error: {ex.Message}");
+                AppendLog($"!! Error: {ex.Message}");
             }
             finally
             {
@@ -341,7 +294,6 @@ namespace ASG.EAT.Plugin.ViewModels
                 AvailablePorts.Add(p);
             }
 
-            // Restore last-used port if still present
             if (!string.IsNullOrEmpty(_settings.SelectedPort) && AvailablePorts.Contains(_settings.SelectedPort))
             {
                 SelectedPort = _settings.SelectedPort;
@@ -354,9 +306,13 @@ namespace ASG.EAT.Plugin.ViewModels
             SelectedBaud = _settings.BaudRate;
         }
 
-        // ────────────────────────────────────────────────────────────────
-        //  Helpers
-        // ────────────────────────────────────────────────────────────────
+        public void TryAutoConnect()
+        {
+            if (_settings.AutoConnectOnStartup && !string.IsNullOrEmpty(_settings.SelectedPort))
+            {
+                DoConnect();
+            }
+        }
 
         private void AppendLog(string message)
         {
@@ -364,8 +320,6 @@ namespace ASG.EAT.Plugin.ViewModels
             Application.Current?.Dispatcher?.Invoke(() =>
             {
                 ActivityLog.Add(timestamped);
-
-                // Keep the log from growing unbounded
                 while (ActivityLog.Count > 500)
                     ActivityLog.RemoveAt(0);
             });
@@ -373,18 +327,6 @@ namespace ASG.EAT.Plugin.ViewModels
             if (_settings.LogSerialTraffic)
             {
                 System.Diagnostics.Debug.WriteLine($"[ASG-EAT] {timestamped}");
-            }
-        }
-
-        // ────────────────────────────────────────────────────────────────
-        //  Auto-connect (called from plugin initialization)
-        // ────────────────────────────────────────────────────────────────
-
-        public void TryAutoConnect()
-        {
-            if (_settings.AutoConnectOnStartup && !string.IsNullOrEmpty(_settings.SelectedPort))
-            {
-                DoConnect();
             }
         }
 
@@ -401,31 +343,6 @@ namespace ASG.EAT.Plugin.ViewModels
         public void Dispose()
         {
             _serial?.Dispose();
-        }
-    }
-
-    // ════════════════════════════════════════════════════════════════════
-    //  Simple RelayCommand implementation
-    // ════════════════════════════════════════════════════════════════════
-
-    public class RelayCommand : ICommand
-    {
-        private readonly Action<object> _execute;
-        private readonly Predicate<object> _canExecute;
-
-        public RelayCommand(Action<object> execute, Predicate<object> canExecute = null)
-        {
-            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-            _canExecute = canExecute;
-        }
-
-        public bool CanExecute(object parameter) => _canExecute?.Invoke(parameter) ?? true;
-        public void Execute(object parameter) => _execute(parameter);
-
-        public event EventHandler CanExecuteChanged
-        {
-            add { CommandManager.RequerySuggested += value; }
-            remove { CommandManager.RequerySuggested -= value; }
         }
     }
 }

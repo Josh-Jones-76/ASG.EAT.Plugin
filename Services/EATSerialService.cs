@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO.Ports;
 using System.Linq;
 using System.Threading;
@@ -8,8 +9,8 @@ namespace ASG.EAT.Plugin.Services
 {
     /// <summary>
     /// Manages serial communication with the ASG Electronic Astronomical Tilt (EAT) Arduino device.
-    /// Handles connection lifecycle, command transmission, and response parsing.
-    /// 
+    /// Handles connection lifecycle, command transmission, and multi-line response parsing.
+    ///
     /// Supported ASG EAT Arduino Commands (from firmware V7):
     /// ────────────────────────────────────────────────────────
     /// Corner Motor Commands (paired tilt - moves 2 motors):
@@ -57,7 +58,6 @@ namespace ASG.EAT.Plugin.Services
         //  Static helpers
         // -------------------------------------------------------------------
 
-        /// <summary>Returns the list of available COM ports on this system.</summary>
         public static string[] GetAvailablePorts()
         {
             try
@@ -70,7 +70,6 @@ namespace ASG.EAT.Plugin.Services
             }
         }
 
-        /// <summary>Standard baud rates supported by the ASG EAT firmware.</summary>
         public static int[] SupportedBaudRates => new int[] {
             9600, 19200, 38400, 57600, 115200
         };
@@ -79,10 +78,6 @@ namespace ASG.EAT.Plugin.Services
         //  Connect / Disconnect
         // -------------------------------------------------------------------
 
-        /// <summary>
-        /// Opens a serial connection to the ASG EAT device.
-        /// Arduino firmware uses 9600 baud by default.
-        /// </summary>
         public bool Connect(string portName, int baudRate = 9600)
         {
             lock (_lock)
@@ -134,7 +129,6 @@ namespace ASG.EAT.Plugin.Services
             }
         }
 
-        /// <summary>Closes the serial connection.</summary>
         public void Disconnect()
         {
             lock (_lock)
@@ -163,20 +157,21 @@ namespace ASG.EAT.Plugin.Services
         }
 
         // -------------------------------------------------------------------
-        //  Send commands
+        //  Send commands — reads all available lines from the Arduino
         // -------------------------------------------------------------------
 
         /// <summary>
-        /// Sends a raw command string to the ASG EAT device and returns the response.
-        /// Commands are terminated with a newline character.
+        /// Sends a command and collects all response lines until the Arduino
+        /// stops sending (detected by a quiet period with no new data).
+        /// Returns all lines as a list of strings.
         /// </summary>
-        public string SendCommand(string command, int timeoutMs = 3000)
+        public List<string> SendCommand(string command, int timeoutMs = 3000)
         {
             lock (_lock)
             {
                 if (!IsConnected)
                 {
-                    return "[ERROR] Not connected to ASG EAT device.";
+                    return new List<string> { "[ERROR] Not connected to ASG EAT device." };
                 }
 
                 try
@@ -190,45 +185,64 @@ namespace ASG.EAT.Plugin.Services
                     // Send the command with newline termination
                     _serialPort.WriteLine(command.Trim());
 
-                    // Wait for and read the response
+                    var lines = new List<string>();
                     var oldTimeout = _serialPort.ReadTimeout;
                     _serialPort.ReadTimeout = timeoutMs;
 
                     try
                     {
-                        string response = _serialPort.ReadLine().Trim();
-                        DataReceived?.Invoke(this, response);
-                        return response;
+                        // Read lines until we get a timeout (no more data)
+                        while (true)
+                        {
+                            string line = _serialPort.ReadLine().Trim();
+                            if (!string.IsNullOrEmpty(line))
+                            {
+                                lines.Add(line);
+                                DataReceived?.Invoke(this, line);
+                            }
+
+                            // After we have at least one line, use a shorter
+                            // timeout for subsequent lines so we don't hang
+                            // waiting for data that's never coming
+                            _serialPort.ReadTimeout = 500;
+                        }
                     }
                     catch (TimeoutException)
                     {
-                        return "[TIMEOUT] No response from device.";
+                        // Expected — means the Arduino has finished sending
                     }
                     finally
                     {
                         _serialPort.ReadTimeout = oldTimeout;
                     }
+
+                    if (lines.Count == 0)
+                    {
+                        lines.Add("[TIMEOUT] No response from device.");
+                    }
+
+                    return lines;
                 }
                 catch (Exception ex)
                 {
                     string error = $"[ERROR] {ex.Message}";
                     ErrorOccurred?.Invoke(this, error);
-                    return error;
+                    return new List<string> { error };
                 }
             }
         }
 
         /// <summary>
         /// Sends a command asynchronously on a background thread.
+        /// Returns all response lines.
         /// </summary>
-        public Task<string> SendCommandAsync(string command, int timeoutMs = 3000, CancellationToken ct = default)
+        public Task<List<string>> SendCommandAsync(string command, int timeoutMs = 3000, CancellationToken ct = default)
         {
             return Task.Run(() => SendCommand(command, timeoutMs), ct);
         }
 
         /// <summary>
         /// Fire-and-forget: sends a command without waiting for a response.
-        /// Useful for movement commands where you'll poll status separately.
         /// </summary>
         public bool SendCommandNoWait(string command)
         {
@@ -247,66 +261,6 @@ namespace ASG.EAT.Plugin.Services
                 }
             }
         }
-
-        // -------------------------------------------------------------------
-        //  Convenience wrappers matching Arduino firmware V7 commands
-        // -------------------------------------------------------------------
-
-        // Corner commands (paired tilt - 2 motors)
-        public Task<string> TiltTopRightAsync(int steps, CancellationToken ct = default)
-            => SendCommandAsync($"tr,{steps}", ct: ct);
-
-        public Task<string> TiltTopLeftAsync(int steps, CancellationToken ct = default)
-            => SendCommandAsync($"tl,{steps}", ct: ct);
-
-        public Task<string> TiltBottomRightAsync(int steps, CancellationToken ct = default)
-            => SendCommandAsync($"br,{steps}", ct: ct);
-
-        public Task<string> TiltBottomLeftAsync(int steps, CancellationToken ct = default)
-            => SendCommandAsync($"bl,{steps}", ct: ct);
-
-        // Directional commands (4 motors)
-        public Task<string> TiltTopAsync(int steps, CancellationToken ct = default)
-            => SendCommandAsync($"tp,{steps}", ct: ct);
-
-        public Task<string> TiltBottomAsync(int steps, CancellationToken ct = default)
-            => SendCommandAsync($"bt,{steps}", ct: ct);
-
-        public Task<string> TiltRightAsync(int steps, CancellationToken ct = default)
-            => SendCommandAsync($"rt,{steps}", ct: ct);
-
-        public Task<string> TiltLeftAsync(int steps, CancellationToken ct = default)
-            => SendCommandAsync($"lt,{steps}", ct: ct);
-
-        // Backfocus (all 4 motors same direction)
-        public Task<string> BackfocusAsync(int steps, CancellationToken ct = default)
-            => SendCommandAsync($"bf,{steps}", ct: ct);
-
-        // Utility commands
-        public Task<string> ZeroResetAsync(CancellationToken ct = default)
-            => SendCommandAsync("zr", ct: ct);
-
-        public Task<string> GetPositionsAsync(CancellationToken ct = default)
-            => SendCommandAsync("cp", ct: ct);
-
-        public Task<string> GetEEPROMAsync(CancellationToken ct = default)
-            => SendCommandAsync("ep", ct: ct);
-
-        public Task<string> SaveEEPROMAsync(CancellationToken ct = default)
-            => SendCommandAsync("up", ct: ct);
-
-        // Configuration commands
-        public Task<string> SetSpeedAsync(int value, CancellationToken ct = default)
-            => SendCommandAsync($"cA,{value}", ct: ct);
-
-        public Task<string> SetMaxSpeedAsync(int value, CancellationToken ct = default)
-            => SendCommandAsync($"cB,{value}", ct: ct);
-
-        public Task<string> SetAccelerationAsync(int value, CancellationToken ct = default)
-            => SendCommandAsync($"cC,{value}", ct: ct);
-
-        public Task<string> SetOrientationAsync(int value, CancellationToken ct = default)
-            => SendCommandAsync($"or,{value}", ct: ct);
 
         // -------------------------------------------------------------------
         //  Private event handlers
