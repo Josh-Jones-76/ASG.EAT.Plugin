@@ -5,9 +5,9 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>ASG.EAT.Plugin</AssemblyName>
     <RootNamespace>ASG.EAT.Plugin</RootNamespace>
-    <Version>1.0.0.0</Version>
+    <Version>1.0.0.1</Version>
     <Authors>ASG Astronomy</Authors>
-    <Description>ASG Electronic Astronomical Tilt (EAT) Device Plugin for N.I.N.A.</Description>
+    <Description>ASG Electronic Assisted Tilt (EAT) Device Plugin for N.I.N.A.</Description>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <Platforms>x64</Platforms>
     <Nullable>disable</Nullable>
@@ -31,6 +31,9 @@
   
     <BaseOutputPath>C:\Users\josh\AppData\Local\NINA\Plugins\3.0.0\ASG.EAT.Plugin\</BaseOutputPath>
     <ProduceReferenceAssembly>True</ProduceReferenceAssembly>
+    <Copyright>2026</Copyright>
+    <RepositoryUrl>https://github.com/Josh-Jones-76/ASG.EAT.Plugin</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>
