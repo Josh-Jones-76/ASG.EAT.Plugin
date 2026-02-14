@@ -71,7 +71,7 @@ namespace ASG.EAT.Plugin
         [ImportingConstructor]
         public EATDockablePanel(IProfileService profileService) : base(profileService)
         {
-            Title = "ASG EAT";
+            Title = "ASG Electronic Tilt";
 
             _settings = EATSettings.Load();
             _serial = new EATSerialService();

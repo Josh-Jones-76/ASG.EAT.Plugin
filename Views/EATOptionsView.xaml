@@ -10,7 +10,7 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
         <StackPanel>
-            <TextBlock Text="ASG Electronic Astronomical Tilt (EAT)" 
+            <TextBlock Text="ASG Electronic Assisted Tilt (EAT)" 
                        FontSize="16" FontWeight="Bold" Margin="0,0,0,5"/>
             <TextBlock Text="Plugin Settings" FontSize="12" Opacity="0.7" Margin="0,0,0,15"/>
 

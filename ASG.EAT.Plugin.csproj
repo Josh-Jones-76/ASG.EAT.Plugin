@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -11,10 +11,12 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <Platforms>x64</Platforms>
     <Nullable>disable</Nullable>
+	<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+	<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+	<OutputPath>C:\Users\josh\AppData\Local\NINA\Plugins\3.0.0\ASG.EAT.Plugin\</OutputPath>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <!-- 
+  <PropertyGroup><!-- 
       NINA Plugin Build Notes:
       ========================
       To build this plugin you need:
@@ -26,6 +28,9 @@
       After building, copy the output DLL to:
         %LOCALAPPDATA%\NINA\Plugins\ASG.EAT.Plugin\
     -->
+  
+    <BaseOutputPath>C:\Users\josh\AppData\Local\NINA\Plugins\3.0.0\ASG.EAT.Plugin\</BaseOutputPath>
+    <ProduceReferenceAssembly>True</ProduceReferenceAssembly>
   </PropertyGroup>
 
   <ItemGroup>
