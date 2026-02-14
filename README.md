@@ -1,0 +1,1 @@
+NINA plugin for ASG Astronomy Electronically Assisted Tilt (EAT) device.  Contains a plugin settings as well as dockable panel for the imaging section.  Control movements, tilts, backfocus from imaging area.
