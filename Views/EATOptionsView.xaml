@@ -15,9 +15,8 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
         <StackPanel>
-            <TextBlock Text="ASG Electronic Assisted Tilt (EAT)" 
-                       FontSize="16" FontWeight="Bold" Margin="0,0,0,5"/>
-            <TextBlock Text="Plugin Settings" FontSize="12" Opacity="0.7" Margin="0,0,0,15"/>
+            <TextBlock Text="ASG Electronic Assisted Tilt (EAT)"
+                       FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/>
 
             <Border BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,12">
@@ -72,7 +71,7 @@
                         <Button Command="{Binding ConnectCommand}"
                                 Padding="16,8" Margin="0,0,8,0" MinHeight="36"
                                 Style="{StaticResource StandardButton}">
-                            <StackPanel Orientation="Horizontal" Margin="4,0">
+                            <StackPanel Orientation="Horizontal" Margin="4,0,8,0">
                                 <TextBlock Text="&#x1F50C;" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                            Foreground="{DynamicResource ButtonForegroundBrush}"/>
                                 <TextBlock Text="Connect" FontSize="11" VerticalAlignment="Center"
@@ -82,7 +81,7 @@
                         <Button Command="{Binding DisconnectCommand}"
                                 Padding="16,8" Margin="0,0,0,0" MinHeight="36"
                                 Style="{StaticResource StandardButton}">
-                            <StackPanel Orientation="Horizontal" Margin="4,0">
+                            <StackPanel Orientation="Horizontal" Margin="4,0,8,0">
                                 <TextBlock Text="&#x1F5D9;" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                            Foreground="{DynamicResource ButtonForegroundBrush}"/>
                                 <TextBlock Text="Disconnect" FontSize="11" VerticalAlignment="Center"
@@ -96,7 +95,7 @@
             <Border BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,12">
                 <StackPanel>
-                    <TextBlock Text="Device Preferences" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,10"/>
+                    <TextBlock Text="NINA Preferences" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,10"/>
 
                     <!-- Default Step Size -->
                     <Grid Margin="0,0,0,8">
@@ -137,9 +136,9 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="150"/><ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Show Raw Command:" VerticalAlignment="Center"/>
+                        <TextBlock Text="Show Raw Command:" VerticalAlignment="Center" FontSize="11"/>
                         <CheckBox Grid.Column="1" IsChecked="{Binding ShowRawCommand, Mode=TwoWay}"
-                                  VerticalAlignment="Center"/>
+                                  VerticalAlignment="Center" HorizontalAlignment="Left"/>
                     </Grid>
 
                     <!-- Show Activity Log -->
@@ -147,14 +146,14 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="150"/><ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Show Activity Log:" VerticalAlignment="Center"/>
+                        <TextBlock Text="Show Activity Log:" VerticalAlignment="Center" FontSize="11"/>
                         <CheckBox Grid.Column="1" IsChecked="{Binding ShowActivityLog, Mode=TwoWay}"
-                                  VerticalAlignment="Center"/>
+                                  VerticalAlignment="Center" HorizontalAlignment="Left"/>
                     </Grid>
 
                     <!-- Motor Configuration (Arduino commands: cA, cB, cC) -->
                     <Separator Margin="0,8,0,8"/>
-                    <TextBlock Text="Motor Configuration" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+                    <TextBlock Text="EAT Motor Settings" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
 
                     <!-- Connection warning for Motor Configuration -->
                     <TextBlock Text="⚠ Connect to EAT to adjust settings"
@@ -209,7 +208,14 @@
 
                     <!-- Orientation Selection -->
                     <Separator Margin="0,8,0,8"/>
-                    <TextBlock Text="Device Orientation" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+                    <TextBlock Text="EAT Camera Orientation" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+
+                    <TextBlock TextWrapping="Wrap" FontSize="11" Opacity="0.8" Margin="0,0,0,8">
+                        It is important to keep track of your camera orientation when you install it into the EAT.
+                        The long edge of your sensor should be in either Orientation #1 &amp; #3 or if you rotated it
+                        may be Orientation #2 or #4. Keep track of the long edge of your sensor so you know you are
+                        in one of two possible orientations.
+                    </TextBlock>
 
                     <!-- Connection warning for Device Orientation -->
                     <TextBlock Text="⚠ Connect to EAT to adjust settings"
@@ -231,12 +237,12 @@
 
                     <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="380"/>
+                            <ColumnDefinition Width="560"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
                         <!-- Visual Preview: Layered Images with Physical Positions -->
-                        <Grid Grid.Column="0" Width="360" Height="360" HorizontalAlignment="Left">
+                        <Grid Grid.Column="0" Width="540" Height="540" HorizontalAlignment="Left">
                             <!-- Outer image (bottom layer - static) -->
                             <Image Source="pack://application:,,,/ASG.EAT.Plugin;component/Assets/EAT-Outer.png"
                                    Stretch="Uniform" />
@@ -252,27 +258,27 @@
 
                             <!-- Physical Position Displays -->
                             <!-- Top-Left Position -->
-                            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Margin="20,20,0,0">
-                                <TextBlock Text="Physical Position:" FontSize="9" Opacity="0.7"/>
+                            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,10,0,0">
+                                <TextBlock Text="M2 - Physical Position:" FontSize="9" Opacity="0.7"/>
                                 <TextBlock Text="{Binding PositionTL}" FontSize="11" FontFamily="Consolas" FontWeight="SemiBold"/>
                             </StackPanel>
 
                             <!-- Top-Right Position -->
-                            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,20,20,0">
-                                <TextBlock Text="Physical Position:" FontSize="9" Opacity="0.7" TextAlignment="Right"/>
+                            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0">
+                                <TextBlock Text="M1 - Physical Position:" FontSize="9" Opacity="0.7" TextAlignment="Right"/>
                                 <TextBlock Text="{Binding PositionTR}" FontSize="11" FontFamily="Consolas" FontWeight="SemiBold" TextAlignment="Right"/>
                             </StackPanel>
 
                             <!-- Bottom-Left Position -->
-                            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20,0,0,20">
+                            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10,0,0,10">
                                 <TextBlock Text="{Binding PositionBL}" FontSize="11" FontFamily="Consolas" FontWeight="SemiBold"/>
-                                <TextBlock Text="Physical Position:" FontSize="9" Opacity="0.7"/>
+                                <TextBlock Text="M4 - Physical Position:" FontSize="9" Opacity="0.7"/>
                             </StackPanel>
 
                             <!-- Bottom-Right Position -->
-                            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,20">
+                            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,10">
                                 <TextBlock Text="{Binding PositionBR}" FontSize="11" FontFamily="Consolas" FontWeight="SemiBold" TextAlignment="Right"/>
-                                <TextBlock Text="Physical Position:" FontSize="9" Opacity="0.7" TextAlignment="Right"/>
+                                <TextBlock Text="M3 - Physical Position:" FontSize="9" Opacity="0.7" TextAlignment="Right"/>
                             </StackPanel>
                         </Grid>
 

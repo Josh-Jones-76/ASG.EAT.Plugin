@@ -37,9 +37,8 @@ using NINA.WPF.Base.ViewModel;
 [assembly: AssemblyMetadata("Description", "Controls the ASG Astronomy electronically assisted tilt device for precise sensor tilt correction.")]
 [assembly: AssemblyMetadata("License", "MIT")]
 [assembly: AssemblyMetadata("LicenseURL", "https://opensource.org/licenses/MIT")]
-[assembly: AssemblyMetadata("Homepage", "https://github.com/asg-astronomy/eat-plugin")]
+[assembly: AssemblyMetadata("Homepage", "https://www.asgastronomy.com")]
 [assembly: AssemblyMetadata("Repository", "https://github.com/asg-astronomy/eat-plugin")]
-[assembly: AssemblyMetadata("ChangelogURL", "https://github.com/asg-astronomy/eat-plugin/blob/main/CHANGELOG.md")]
 [assembly: AssemblyMetadata("Tags", "Tilt,Alignment,Hardware,Arduino")]
 [assembly: AssemblyMetadata("MinimumApplicationVersion", "3.0.0.9001")]
 
