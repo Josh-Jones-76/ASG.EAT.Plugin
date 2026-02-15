@@ -97,26 +97,82 @@
                     BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,12">
                 <StackPanel>
                     <TextBlock Text="Device Preferences" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,10"/>
-                    <Grid Margin="0,0,0,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="150"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Command Timeout:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="1" Text="{Binding CommandTimeoutMs, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" HorizontalContentAlignment="Right"/>
-                        <TextBlock Grid.Column="2" Text=" ms" VerticalAlignment="Center"/>
-                    </Grid>
+
+                    <!-- Default Step Size -->
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="150"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="Default Step Size:" VerticalAlignment="Center"/>
                         <TextBox Grid.Column="1" Text="{Binding DefaultStepSize, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" HorizontalContentAlignment="Right"/>
-                        <TextBlock Grid.Column="2" Text=" steps" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text=" steps - Set the default step size in the docked window. Recommended 1-25."
+                                   VerticalAlignment="Center" FontSize="10" Opacity="0.8" Margin="4,0,0,0"/>
+                    </Grid>
+
+                    <!-- Sensor Color -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/><ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Sensor Color:" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <ComboBox ItemsSource="{Binding AvailableSensorColors}"
+                                      SelectedItem="{Binding SensorColor, Mode=TwoWay}"
+                                      MinWidth="120">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Rectangle Width="20" Height="14" Fill="{Binding}" Margin="0,0,8,0"
+                                                      Stroke="{DynamicResource BorderBrush}" StrokeThickness="1"/>
+                                            <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Show Raw Command -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/><ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Show Raw Command:" VerticalAlignment="Center"/>
+                        <CheckBox Grid.Column="1" IsChecked="{Binding ShowRawCommand, Mode=TwoWay}"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Show Activity Log -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/><ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Show Activity Log:" VerticalAlignment="Center"/>
+                        <CheckBox Grid.Column="1" IsChecked="{Binding ShowActivityLog, Mode=TwoWay}"
+                                  VerticalAlignment="Center"/>
                     </Grid>
 
                     <!-- Motor Configuration (Arduino commands: cA, cB, cC) -->
                     <Separator Margin="0,8,0,8"/>
-                    <TextBlock Text="Motor Configuration" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,8"/>
+                    <TextBlock Text="Motor Configuration" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+
+                    <!-- Connection warning for Motor Configuration -->
+                    <TextBlock Text="⚠ Connect to EAT to adjust settings"
+                               FontSize="10"
+                               Foreground="Red"
+                               Margin="0,0,0,8"
+                               FontStyle="Italic">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsConnected}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
 
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
@@ -153,7 +209,25 @@
 
                     <!-- Orientation Selection -->
                     <Separator Margin="0,8,0,8"/>
-                    <TextBlock Text="Device Orientation" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,8"/>
+                    <TextBlock Text="Device Orientation" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+
+                    <!-- Connection warning for Device Orientation -->
+                    <TextBlock Text="⚠ Connect to EAT to adjust settings"
+                               FontSize="10"
+                               Foreground="Red"
+                               Margin="0,0,0,8"
+                               FontStyle="Italic">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsConnected}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
 
                     <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
@@ -161,7 +235,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Visual Preview: Layered Images -->
+                        <!-- Visual Preview: Layered Images with Physical Positions -->
                         <Grid Grid.Column="0" Width="360" Height="360" HorizontalAlignment="Left">
                             <!-- Outer image (bottom layer - static) -->
                             <Image Source="pack://application:,,,/ASG.EAT.Plugin;component/Assets/EAT-Outer.png"
@@ -175,6 +249,31 @@
                                     <RotateTransform Angle="{Binding InnerRotationAngle}"/>
                                 </Image.RenderTransform>
                             </Image>
+
+                            <!-- Physical Position Displays -->
+                            <!-- Top-Left Position -->
+                            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Margin="20,20,0,0">
+                                <TextBlock Text="Physical Position:" FontSize="9" Opacity="0.7"/>
+                                <TextBlock Text="{Binding PositionTL}" FontSize="11" FontFamily="Consolas" FontWeight="SemiBold"/>
+                            </StackPanel>
+
+                            <!-- Top-Right Position -->
+                            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,20,20,0">
+                                <TextBlock Text="Physical Position:" FontSize="9" Opacity="0.7" TextAlignment="Right"/>
+                                <TextBlock Text="{Binding PositionTR}" FontSize="11" FontFamily="Consolas" FontWeight="SemiBold" TextAlignment="Right"/>
+                            </StackPanel>
+
+                            <!-- Bottom-Left Position -->
+                            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20,0,0,20">
+                                <TextBlock Text="{Binding PositionBL}" FontSize="11" FontFamily="Consolas" FontWeight="SemiBold"/>
+                                <TextBlock Text="Physical Position:" FontSize="9" Opacity="0.7"/>
+                            </StackPanel>
+
+                            <!-- Bottom-Right Position -->
+                            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,20">
+                                <TextBlock Text="{Binding PositionBR}" FontSize="11" FontFamily="Consolas" FontWeight="SemiBold" TextAlignment="Right"/>
+                                <TextBlock Text="Physical Position:" FontSize="9" Opacity="0.7" TextAlignment="Right"/>
+                            </StackPanel>
                         </Grid>
 
                         <!-- Orientation Selection Buttons -->
@@ -183,15 +282,19 @@
 
                             <RadioButton Content="Orientation #1 (0°)"
                                          IsChecked="{Binding Orientation, Converter={StaticResource IntToBoolConverter}, ConverterParameter=1}"
+                                         IsEnabled="{Binding IsConnected}"
                                          Margin="0,0,0,6" FontSize="11"/>
                             <RadioButton Content="Orientation #2 (90°)"
                                          IsChecked="{Binding Orientation, Converter={StaticResource IntToBoolConverter}, ConverterParameter=2}"
+                                         IsEnabled="{Binding IsConnected}"
                                          Margin="0,0,0,6" FontSize="11"/>
                             <RadioButton Content="Orientation #3 (180°)"
                                          IsChecked="{Binding Orientation, Converter={StaticResource IntToBoolConverter}, ConverterParameter=3}"
+                                         IsEnabled="{Binding IsConnected}"
                                          Margin="0,0,0,6" FontSize="11"/>
                             <RadioButton Content="Orientation #4 (270°)"
                                          IsChecked="{Binding Orientation, Converter={StaticResource IntToBoolConverter}, ConverterParameter=4}"
+                                         IsEnabled="{Binding IsConnected}"
                                          Margin="0,0,0,6" FontSize="11"/>
                         </StackPanel>
                     </Grid>

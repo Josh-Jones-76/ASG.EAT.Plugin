@@ -8,6 +8,22 @@ namespace ASG.EAT.Plugin.Views
     {
         public EATControlPanelView()
         {
+            // Ensure initialization happens on UI thread to prevent threading errors
+            if (Dispatcher.CheckAccess())
+            {
+                InitializeControl();
+            }
+            else
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    InitializeControl();
+                });
+            }
+        }
+
+        private void InitializeControl()
+        {
             InitializeComponent();
 
             // Auto-scroll activity log to bottom

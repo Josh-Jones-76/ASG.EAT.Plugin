@@ -10,7 +10,20 @@ namespace ASG.EAT.Plugin.Views
         public EATOptionsView()
         {
             InitializeComponent();
-            DataContext = new EATOptionsViewModel();
+
+            // Use shared ViewModel instance to ensure connection state is synchronized
+            // between settings panel and dockable window
+            if (Dispatcher.CheckAccess())
+            {
+                DataContext = ViewModelManager.Instance.OptionsViewModel;
+            }
+            else
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    DataContext = ViewModelManager.Instance.OptionsViewModel;
+                });
+            }
         }
 
         private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)

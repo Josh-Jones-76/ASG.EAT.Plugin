@@ -68,22 +68,59 @@ namespace ASG.EAT.Plugin
     [Export(typeof(IDockableVM))]
     public class EATDockablePanel : DockableVM, IDisposable
     {
-        private readonly EATSerialService _serial;
-        private readonly EATSettings _settings;
+        private EATSerialService _serial;
+        private EATSettings _settings;
+        private static readonly object _portsLock = new object();
+        private static readonly object _activityLogLock = new object();
+        private ObservableCollection<string> _availablePorts;
+        private ObservableCollection<string> _activityLog;
 
         [ImportingConstructor]
         public EATDockablePanel(IProfileService profileService) : base(profileService)
         {
             Title = "ASG Electronic Tilt";
 
+            // CRITICAL: Force all initialization onto UI thread synchronously
+            // This blocks MEF construction but ensures no cross-thread binding issues
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher != null && !dispatcher.CheckAccess())
+            {
+                // We're on a background thread - marshal to UI thread and block until complete
+                dispatcher.Invoke(() =>
+                {
+                    InitializeOnUIThread();
+                }, System.Windows.Threading.DispatcherPriority.Normal);
+            }
+            else
+            {
+                // Already on UI thread or no dispatcher available
+                InitializeOnUIThread();
+            }
+        }
+
+        private void InitializeOnUIThread()
+        {
             // Set plugin icon - Simple 5-pointed star for astronomy
+            // MUST be created on UI thread since Geometry is a DependencyObject
             var starGeometry = Geometry.Parse("M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z");
             var iconGroup = new GeometryGroup();
             iconGroup.Children.Add(starGeometry);
             ImageGeometry = iconGroup;
 
+            // Initialize observable collections BEFORE enabling synchronization
+            _availablePorts = new ObservableCollection<string>();
+            _activityLog = new ObservableCollection<string>();
+
+            // Enable cross-thread access to observable collections
+            System.Windows.Data.BindingOperations.EnableCollectionSynchronization(_availablePorts, _portsLock);
+            System.Windows.Data.BindingOperations.EnableCollectionSynchronization(_activityLog, _activityLogLock);
+
+            // Initialize settings and serial service
             _settings = EATSettings.Load();
             _serial = EATConnectionManager.Instance.SerialService;
+
+            // Initialize all commands immediately on UI thread
+            InitializeCommands();
 
             // Wire up serial events
             _serial.ConnectionStateChanged += (s, connected) =>
@@ -92,7 +129,6 @@ namespace ASG.EAT.Plugin
                 {
                     IsConnected = connected;
 
-                    // When connected (from any source), initialize the panel
                     if (connected)
                     {
                         OnConnected();
@@ -112,37 +148,139 @@ namespace ASG.EAT.Plugin
                 });
             };
 
-            // ── Connection commands ────────────────────────────────────
+            // Subscribe to orientation changes to update rotated position displays
+            ViewModels.ViewModelManager.Instance.OptionsViewModel.OrientationChanged += (s, e) =>
+            {
+                Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    // Update all display position properties when orientation changes
+                    RaisePropertyChanged(nameof(DisplayPositionTL));
+                    RaisePropertyChanged(nameof(DisplayPositionTR));
+                    RaisePropertyChanged(nameof(DisplayPositionBL));
+                    RaisePropertyChanged(nameof(DisplayPositionBR));
+                });
+            };
+
+            // Subscribe to sensor color changes to update sensor background
+            ViewModels.ViewModelManager.Instance.OptionsViewModel.SensorColorChanged += (s, e) =>
+            {
+                Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    RaisePropertyChanged(nameof(SensorColorBrush));
+                });
+            };
+
+            // Subscribe to visibility setting changes
+            ViewModels.ViewModelManager.Instance.OptionsViewModel.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(ViewModels.EATOptionsViewModel.ShowRawCommand))
+                {
+                    Application.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        RaisePropertyChanged(nameof(ShowRawCommand));
+                    });
+                }
+                else if (e.PropertyName == nameof(ViewModels.EATOptionsViewModel.ShowActivityLog))
+                {
+                    Application.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        RaisePropertyChanged(nameof(ShowActivityLog));
+                    });
+                }
+            };
+
+            // Perform initial setup
+            DoRefreshPorts();
+            AppendLog("[ASG EAT Plugin Ready]");
+            LoadDefaultStepSizes();
+
+            if (_settings.AutoConnectOnStartup && !string.IsNullOrEmpty(_settings.SelectedPort))
+            {
+                DoConnect();
+            }
+        }
+
+        private void InitializeCommands()
+        {
+            // Initialize all commands
             ConnectCommand = new RelayCommand(_ => DoConnect(),
                 _ => !IsConnected && !string.IsNullOrEmpty(SelectedPort));
             DisconnectCommand = new RelayCommand(_ => DoDisconnect(),
                 _ => IsConnected);
             RefreshPortsCommand = new RelayCommand(_ => DoRefreshPorts());
 
-            // ── Directional tilt (4-motor): tp, bt, lt, rt ────────────
-            // Commands are mapped based on orientation to match camera position
-            MoveTopCommand = new RelayCommand(_ => DoCmd(MapDirectionCommand("tp", TopSteps)), _ => IsConnected && !IsMoving);
-            MoveBottomCommand = new RelayCommand(_ => DoCmd(MapDirectionCommand("bt", BottomSteps)), _ => IsConnected && !IsMoving);
-            MoveLeftCommand = new RelayCommand(_ => DoCmd(MapDirectionCommand("lt", LeftSteps)), _ => IsConnected && !IsMoving);
-            MoveRightCommand = new RelayCommand(_ => DoCmd(MapDirectionCommand("rt", RightSteps)), _ => IsConnected && !IsMoving);
+            MoveTopCommand = new RelayCommand(_ =>
+            {
+                if (ValidateStepSize(TopSteps, "Top")) DoCmd(MapDirectionCommand("tp", TopSteps));
+            }, _ => IsConnected && !IsMoving);
 
-            // ── Corner tilt (2-motor paired): tl, tr, bl, br ──────────
-            // Commands are mapped based on orientation to match camera position
-            MoveTopLeftCommand = new RelayCommand(_ => DoCmd(MapCornerCommand("tl", TopLeftSteps)), _ => IsConnected && !IsMoving);
-            MoveTopRightCommand = new RelayCommand(_ => DoCmd(MapCornerCommand("tr", TopRightSteps)), _ => IsConnected && !IsMoving);
-            MoveBottomLeftCommand = new RelayCommand(_ => DoCmd(MapCornerCommand("bl", BottomLeftSteps)), _ => IsConnected && !IsMoving);
-            MoveBottomRightCommand = new RelayCommand(_ => DoCmd(MapCornerCommand("br", BottomRightSteps)), _ => IsConnected && !IsMoving);
+            MoveBottomCommand = new RelayCommand(_ =>
+            {
+                if (ValidateStepSize(BottomSteps, "Bottom")) DoCmd(MapDirectionCommand("bt", BottomSteps));
+            }, _ => IsConnected && !IsMoving);
 
-            // ── Backfocus (all 4 motors): bf ───────────────────────────
-            BackfocusInCommand = new RelayCommand(_ => DoCmd($"bf,{BackfocusSteps}"), _ => IsConnected && !IsMoving);
-            BackfocusOutCommand = new RelayCommand(_ => DoCmd($"bf,{-BackfocusSteps}"), _ => IsConnected && !IsMoving);
+            MoveLeftCommand = new RelayCommand(_ =>
+            {
+                if (ValidateStepSize(LeftSteps, "Left")) DoCmd(MapDirectionCommand("lt", LeftSteps));
+            }, _ => IsConnected && !IsMoving);
 
-            // ── Utility: zr, cp, up ────────────────────────────────────
-            ZeroAllCommand = new RelayCommand(_ => DoCmd("zr"), _ => IsConnected && !IsMoving);
+            MoveRightCommand = new RelayCommand(_ =>
+            {
+                if (ValidateStepSize(RightSteps, "Right")) DoCmd(MapDirectionCommand("rt", RightSteps));
+            }, _ => IsConnected && !IsMoving);
+
+            MoveTopLeftCommand = new RelayCommand(_ =>
+            {
+                if (ValidateStepSize(TopLeftSteps, "Top-Left")) DoCmd(MapCornerCommand("tl", TopLeftSteps));
+            }, _ => IsConnected && !IsMoving);
+
+            MoveTopRightCommand = new RelayCommand(_ =>
+            {
+                if (ValidateStepSize(TopRightSteps, "Top-Right")) DoCmd(MapCornerCommand("tr", TopRightSteps));
+            }, _ => IsConnected && !IsMoving);
+
+            MoveBottomLeftCommand = new RelayCommand(_ =>
+            {
+                if (ValidateStepSize(BottomLeftSteps, "Bottom-Left")) DoCmd(MapCornerCommand("bl", BottomLeftSteps));
+            }, _ => IsConnected && !IsMoving);
+
+            MoveBottomRightCommand = new RelayCommand(_ =>
+            {
+                if (ValidateStepSize(BottomRightSteps, "Bottom-Right")) DoCmd(MapCornerCommand("br", BottomRightSteps));
+            }, _ => IsConnected && !IsMoving);
+
+            BackfocusInCommand = new RelayCommand(_ =>
+            {
+                if (ValidateStepSize(BackfocusSteps, "Backfocus In")) DoCmd($"bf,{BackfocusSteps}");
+            }, _ => IsConnected && !IsMoving);
+
+            BackfocusOutCommand = new RelayCommand(_ =>
+            {
+                if (ValidateStepSize(BackfocusSteps, "Backfocus Out")) DoCmd($"bf,{-BackfocusSteps}");
+            }, _ => IsConnected && !IsMoving);
+
+            ZeroAllCommand = new RelayCommand(_ =>
+            {
+                var result = MessageBox.Show(
+                    "⚠ Important: Zero All only resets the software position values to zero.\n\n" +
+                    "To physically reset the device:\n" +
+                    "1. Remove power from the EAT controller\n" +
+                    "2. Manually push the device fully in to bottom out\n" +
+                    "3. Restore power\n\n" +
+                    "Do you want to zero the software values?",
+                    "Zero All - Physical Reset Required",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    DoCmd("zr");
+                }
+            }, _ => IsConnected && !IsMoving);
+
             GetPositionsCommand = new RelayCommand(_ => DoCmd("cp"), _ => IsConnected && !IsMoving);
             SaveEEPROMCommand = new RelayCommand(_ => DoCmd("up"), _ => IsConnected && !IsMoving);
 
-            // ── Raw command + log ──────────────────────────────────────
             SendRawCommand = new RelayCommand(_ => DoSendRaw(),
                 _ => IsConnected && !string.IsNullOrWhiteSpace(RawCommandText) && !IsMoving);
             ClearLogCommand = new RelayCommand(_ =>
@@ -150,19 +288,6 @@ namespace ASG.EAT.Plugin
                 ActivityLog.Clear();
                 RaisePropertyChanged(nameof(ActivityLog));
             });
-
-            // Initialize port list
-            DoRefreshPorts();
-            AppendLog("[ASG EAT Plugin Ready]");
-
-            // Load default step sizes from settings
-            LoadDefaultStepSizes();
-
-            // Auto-connect if configured
-            if (_settings.AutoConnectOnStartup && !string.IsNullOrEmpty(_settings.SelectedPort))
-            {
-                DoConnect();
-            }
         }
 
         // ────────────────────────────────────────────────────────────────
@@ -216,25 +341,36 @@ namespace ASG.EAT.Plugin
         //  Connection properties
         // ────────────────────────────────────────────────────────────────
 
-        private ObservableCollection<string> _availablePorts = new ObservableCollection<string>();
         public ObservableCollection<string> AvailablePorts
         {
             get => _availablePorts;
             set { _availablePorts = value; RaisePropertyChanged(); }
         }
 
-        private string _selectedPort;
+        private string _selectedPort = string.Empty;
         public string SelectedPort
         {
-            get => _selectedPort;
-            set { _selectedPort = value; RaisePropertyChanged(); if (value != null) _settings.SelectedPort = value; }
+            get => _selectedPort ?? string.Empty;
+            set
+            {
+                _selectedPort = value;
+                RaisePropertyChanged();
+                if (value != null && _settings != null)
+                    _settings.SelectedPort = value;
+            }
         }
 
         private int _selectedBaud = 9600;
         public int SelectedBaud
         {
             get => _selectedBaud;
-            set { _selectedBaud = value; RaisePropertyChanged(); _settings.BaudRate = value; }
+            set
+            {
+                _selectedBaud = value;
+                RaisePropertyChanged();
+                if (_settings != null)
+                    _settings.BaudRate = value;
+            }
         }
 
         public int[] BaudRates => new[] { 9600, 19200, 38400, 57600, 115200 };
@@ -246,20 +382,48 @@ namespace ASG.EAT.Plugin
             set { _isConnected = value; RaisePropertyChanged(); RaisePropertyChanged(nameof(ConnectionStatus)); }
         }
 
+        // Visibility toggles from settings
+        public bool ShowRawCommand => ViewModels.ViewModelManager.Instance.OptionsViewModel.ShowRawCommand;
+        public bool ShowActivityLog => ViewModels.ViewModelManager.Instance.OptionsViewModel.ShowActivityLog;
+
         public string ConnectionStatus
         {
             get
             {
-                if (!IsConnected)
-                    return "Disconnected";
-                if (IsMoving)
+                try
                 {
-                    // Show specific status based on current operation
-                    if (!string.IsNullOrEmpty(CurrentOperation))
-                        return $"{CurrentOperation} — {_serial.ConnectedPort} @ {_serial.ConnectedBaud}";
-                    return $"Moving — {_serial.ConnectedPort} @ {_serial.ConnectedBaud}";
+                    if (!IsConnected)
+                        return "Disconnected";
+                    if (IsMoving)
+                    {
+                        // Show specific status based on current operation
+                        if (!string.IsNullOrEmpty(CurrentOperation))
+                            return $"{CurrentOperation} — {_serial?.ConnectedPort ?? "N/A"} @ {_serial?.ConnectedBaud ?? 0}";
+                        return $"Moving — {_serial?.ConnectedPort ?? "N/A"} @ {_serial?.ConnectedBaud ?? 0}";
+                    }
+                    return $"Connected — {_serial?.ConnectedPort ?? "N/A"} @ {_serial?.ConnectedBaud ?? 0}";
                 }
-                return $"Connected — {_serial.ConnectedPort} @ {_serial.ConnectedBaud}";
+                catch
+                {
+                    return "Disconnected";
+                }
+            }
+        }
+
+        // Sensor color from settings
+        public System.Windows.Media.Brush SensorColorBrush
+        {
+            get
+            {
+                try
+                {
+                    var colorString = ViewModels.ViewModelManager.Instance.OptionsViewModel.SensorColor;
+                    return (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFrom(colorString);
+                }
+                catch
+                {
+                    return new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(42, 42, 42));
+                }
             }
         }
 
@@ -298,16 +462,140 @@ namespace ASG.EAT.Plugin
         // ────────────────────────────────────────────────────────────────
 
         private string _positionTL = "—";
-        public string PositionTL { get => _positionTL; set { _positionTL = value; RaisePropertyChanged(); } }
+        public string PositionTL
+        {
+            get => _positionTL;
+            set
+            {
+                _positionTL = value;
+                RaisePropertyChanged();
+                // Update all rotated display properties
+                RaisePropertyChanged(nameof(DisplayPositionTL));
+                RaisePropertyChanged(nameof(DisplayPositionTR));
+                RaisePropertyChanged(nameof(DisplayPositionBL));
+                RaisePropertyChanged(nameof(DisplayPositionBR));
+                // Update settings panel physical positions
+                ViewModels.ViewModelManager.Instance.OptionsViewModel.PositionTL = value;
+            }
+        }
 
         private string _positionTR = "—";
-        public string PositionTR { get => _positionTR; set { _positionTR = value; RaisePropertyChanged(); } }
+        public string PositionTR
+        {
+            get => _positionTR;
+            set
+            {
+                _positionTR = value;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(DisplayPositionTL));
+                RaisePropertyChanged(nameof(DisplayPositionTR));
+                RaisePropertyChanged(nameof(DisplayPositionBL));
+                RaisePropertyChanged(nameof(DisplayPositionBR));
+                // Update settings panel physical positions
+                ViewModels.ViewModelManager.Instance.OptionsViewModel.PositionTR = value;
+            }
+        }
 
         private string _positionBL = "—";
-        public string PositionBL { get => _positionBL; set { _positionBL = value; RaisePropertyChanged(); } }
+        public string PositionBL
+        {
+            get => _positionBL;
+            set
+            {
+                _positionBL = value;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(DisplayPositionTL));
+                RaisePropertyChanged(nameof(DisplayPositionTR));
+                RaisePropertyChanged(nameof(DisplayPositionBL));
+                RaisePropertyChanged(nameof(DisplayPositionBR));
+                // Update settings panel physical positions
+                ViewModels.ViewModelManager.Instance.OptionsViewModel.PositionBL = value;
+            }
+        }
 
         private string _positionBR = "—";
-        public string PositionBR { get => _positionBR; set { _positionBR = value; RaisePropertyChanged(); } }
+        public string PositionBR
+        {
+            get => _positionBR;
+            set
+            {
+                _positionBR = value;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(DisplayPositionTL));
+                RaisePropertyChanged(nameof(DisplayPositionTR));
+                RaisePropertyChanged(nameof(DisplayPositionBL));
+                RaisePropertyChanged(nameof(DisplayPositionBR));
+                // Update settings panel physical positions
+                ViewModels.ViewModelManager.Instance.OptionsViewModel.PositionBR = value;
+            }
+        }
+
+        // Computed properties that rotate the position display based on orientation
+        // Orientation 1 = 0°, 2 = 90° CW, 3 = 180°, 4 = 270° CW
+        // Rotation follows same logic as movement commands
+        public string DisplayPositionTL
+        {
+            get
+            {
+                var orientation = ViewModels.ViewModelManager.Instance.OptionsViewModel.Orientation;
+                return orientation switch
+                {
+                    1 => _positionTL, // 0° - no rotation
+                    2 => _positionTR, // 90° CW - physical TR is now in TL display position
+                    3 => _positionBR, // 180° - physical BR is in TL position
+                    4 => _positionBL, // 270° CW - physical BL is in TL position
+                    _ => _positionTL
+                };
+            }
+        }
+
+        public string DisplayPositionTR
+        {
+            get
+            {
+                var orientation = ViewModels.ViewModelManager.Instance.OptionsViewModel.Orientation;
+                return orientation switch
+                {
+                    1 => _positionTR, // 0° - no rotation
+                    2 => _positionBR, // 90° CW - physical BR is now in TR position
+                    3 => _positionBL, // 180° - physical BL is in TR position
+                    4 => _positionTL, // 270° CW - physical TL is in TR position
+                    _ => _positionTR
+                };
+            }
+        }
+
+        public string DisplayPositionBL
+        {
+            get
+            {
+                var orientation = ViewModels.ViewModelManager.Instance.OptionsViewModel.Orientation;
+                return orientation switch
+                {
+                    1 => _positionBL, // 0° - no rotation
+                    2 => _positionTL, // 90° CW - physical TL is now in BL position
+                    3 => _positionTR, // 180° - physical TR is in BL position
+                    4 => _positionBR, // 270° CW - physical BR is in BL position
+                    _ => _positionBL
+                };
+            }
+        }
+
+        public string DisplayPositionBR
+        {
+            get
+            {
+                var orientation = ViewModels.ViewModelManager.Instance.OptionsViewModel.Orientation;
+                return orientation switch
+                {
+                    1 => _positionBR, // 0° - no rotation
+                    2 => _positionBL, // 90° CW - physical BL is now in BR position
+                    3 => _positionTL, // 180° - physical TL is in BR position
+                    4 => _positionTR, // 270° CW - physical TR is in BR position
+                    _ => _positionBR
+                };
+            }
+        }
 
         // ────────────────────────────────────────────────────────────────
         //  Step size properties
@@ -353,35 +641,39 @@ namespace ASG.EAT.Plugin
         private bool _isBusy;
         public bool IsBusy { get => _isBusy; set { _isBusy = value; RaisePropertyChanged(); } }
 
-        public ObservableCollection<string> ActivityLog { get; } = new ObservableCollection<string>();
+        public ObservableCollection<string> ActivityLog => _activityLog;
 
         // ────────────────────────────────────────────────────────────────
         //  Commands
         // ────────────────────────────────────────────────────────────────
 
-        public ICommand ConnectCommand { get; }
-        public ICommand DisconnectCommand { get; }
-        public ICommand RefreshPortsCommand { get; }
+        // Initialize all commands with dummy commands to prevent null reference during binding
+        // These will be replaced with real commands in InitializeAsync()
+        private static readonly ICommand DummyCommand = new RelayCommand(_ => { }, _ => false);
 
-        public ICommand MoveTopCommand { get; }
-        public ICommand MoveBottomCommand { get; }
-        public ICommand MoveLeftCommand { get; }
-        public ICommand MoveRightCommand { get; }
+        public ICommand ConnectCommand { get; private set; } = DummyCommand;
+        public ICommand DisconnectCommand { get; private set; } = DummyCommand;
+        public ICommand RefreshPortsCommand { get; private set; } = DummyCommand;
 
-        public ICommand MoveTopLeftCommand { get; }
-        public ICommand MoveTopRightCommand { get; }
-        public ICommand MoveBottomLeftCommand { get; }
-        public ICommand MoveBottomRightCommand { get; }
+        public ICommand MoveTopCommand { get; private set; } = DummyCommand;
+        public ICommand MoveBottomCommand { get; private set; } = DummyCommand;
+        public ICommand MoveLeftCommand { get; private set; } = DummyCommand;
+        public ICommand MoveRightCommand { get; private set; } = DummyCommand;
 
-        public ICommand BackfocusInCommand { get; }
-        public ICommand BackfocusOutCommand { get; }
+        public ICommand MoveTopLeftCommand { get; private set; } = DummyCommand;
+        public ICommand MoveTopRightCommand { get; private set; } = DummyCommand;
+        public ICommand MoveBottomLeftCommand { get; private set; } = DummyCommand;
+        public ICommand MoveBottomRightCommand { get; private set; } = DummyCommand;
 
-        public ICommand ZeroAllCommand { get; }
-        public ICommand GetPositionsCommand { get; }
-        public ICommand SaveEEPROMCommand { get; }
+        public ICommand BackfocusInCommand { get; private set; } = DummyCommand;
+        public ICommand BackfocusOutCommand { get; private set; } = DummyCommand;
 
-        public ICommand SendRawCommand { get; }
-        public ICommand ClearLogCommand { get; }
+        public ICommand ZeroAllCommand { get; private set; } = DummyCommand;
+        public ICommand GetPositionsCommand { get; private set; } = DummyCommand;
+        public ICommand SaveEEPROMCommand { get; private set; } = DummyCommand;
+
+        public ICommand SendRawCommand { get; private set; } = DummyCommand;
+        public ICommand ClearLogCommand { get; private set; } = DummyCommand;
 
         // ────────────────────────────────────────────────────────────────
         //  Command implementations
@@ -500,9 +792,9 @@ namespace ASG.EAT.Plugin
         /// <summary>
         /// Maps a directional command based on device orientation.
         /// Orientation 1 (0°): tp→tp, bt→bt, lt→lt, rt→rt
-        /// Orientation 2 (90°): tp→rt, bt→lt, lt→tp, rt→bt
+        /// Orientation 2 (90° CW): tp→lt, bt→rt, lt→bt, rt→tp
         /// Orientation 3 (180°): tp→bt, bt→tp, lt→rt, rt→lt
-        /// Orientation 4 (270°): tp→lt, bt→rt, lt→bt, rt→tp
+        /// Orientation 4 (270° CW): tp→rt, bt→lt, lt→tp, rt→bt
         /// </summary>
         private string MapDirectionCommand(string logicalDirection, int steps)
         {
@@ -519,36 +811,56 @@ namespace ASG.EAT.Plugin
                 case 2: // 90° clockwise
                     physicalDirection = logicalDirection switch
                     {
-                        "tp" => "rt", // Top camera → Right motor
-                        "bt" => "lt", // Bottom camera → Left motor
-                        "lt" => "tp", // Left camera → Top motor
-                        "rt" => "bt", // Right camera → Bottom motor
+                        "tp" => "rt", // Top camera edge → Right motor edge (TR+BR)
+                        "bt" => "lt", // Bottom camera edge → Left motor edge (TL+BL)
+                        "lt" => "tp", // Left camera edge → Top motor edge (TL+TR)
+                        "rt" => "bt", // Right camera edge → Bottom motor edge (BL+BR)
                         _ => logicalDirection
                     };
                     break;
                 case 3: // 180°
                     physicalDirection = logicalDirection switch
                     {
-                        "tp" => "bt", // Top camera → Bottom motor
-                        "bt" => "tp", // Bottom camera → Top motor
-                        "lt" => "rt", // Left camera → Right motor
-                        "rt" => "lt", // Right camera → Left motor
+                        "tp" => "bt", // Top camera edge → Bottom motor edge
+                        "bt" => "tp", // Bottom camera edge → Top motor edge
+                        "lt" => "rt", // Left camera edge → Right motor edge
+                        "rt" => "lt", // Right camera edge → Left motor edge
                         _ => logicalDirection
                     };
                     break;
                 case 4: // 270° clockwise (or 90° counter-clockwise)
                     physicalDirection = logicalDirection switch
                     {
-                        "tp" => "lt", // Top camera → Left motor
-                        "bt" => "rt", // Bottom camera → Right motor
-                        "lt" => "bt", // Left camera → Bottom motor
-                        "rt" => "tp", // Right camera → Top motor
+                        "tp" => "lt", // Top camera edge → Left motor edge (TL+BL)
+                        "bt" => "rt", // Bottom camera edge → Right motor edge (TR+BR)
+                        "lt" => "bt", // Left camera edge → Bottom motor edge (BL+BR)
+                        "rt" => "tp", // Right camera edge → Top motor edge (TL+TR)
                         _ => logicalDirection
                     };
                     break;
             }
 
             return $"{physicalDirection},{steps}";
+        }
+
+        /// <summary>
+        /// Validates step size to prevent extremely large moves that could damage the device
+        /// </summary>
+        private bool ValidateStepSize(int steps, string moveName)
+        {
+            if (Math.Abs(steps) > 2000)
+            {
+                var result = MessageBox.Show(
+                    $"⚠ Warning: {moveName} move is {steps} steps.\n\n" +
+                    $"This is a very large move (>{Math.Abs(steps)} steps) that could cause issues or damage the device.\n\n" +
+                    $"Are you sure you want to proceed?",
+                    "Large Move Warning",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                return result == MessageBoxResult.Yes;
+            }
+            return true;
         }
 
         private async void DoCmd(string cmd)
@@ -582,13 +894,15 @@ namespace ASG.EAT.Plugin
             catch (Exception ex)
             {
                 AppendLog($"!! {ex.Message}");
+                // Clear moving state on error
+                Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    CurrentOperation = string.Empty;
+                    IsMoving = false;
+                    IsBusy = false;
+                });
             }
-            finally
-            {
-                CurrentOperation = string.Empty;
-                IsMoving = false;
-                IsBusy = false;
-            }
+            // Note: IsMoving is cleared when "***finished movement***" is received in ParseResponseLines
         }
 
         private async void DoSendRaw()
@@ -612,13 +926,18 @@ namespace ASG.EAT.Plugin
             catch (Exception ex)
             {
                 AppendLog($"!! {ex.Message}");
+                // Clear moving state on error
+                Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    IsMoving = false;
+                    IsBusy = false;
+                });
             }
             finally
             {
-                IsMoving = false;
-                IsBusy = false;
                 RawCommandText = string.Empty;
             }
+            // Note: IsMoving is cleared when "***finished movement***" is received in ParseResponseLines
         }
 
         // ────────────────────────────────────────────────────────────────
@@ -640,6 +959,18 @@ namespace ASG.EAT.Plugin
 
             foreach (var line in lines)
             {
+                // Check for movement finished message
+                if (line.Contains("***finished movement***"))
+                {
+                    Application.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        CurrentOperation = string.Empty;
+                        IsMoving = false;
+                        IsBusy = false;
+                    });
+                    continue;
+                }
+
                 if (line.Contains("***Get Current Positions***"))
                 {
                     inPositionBlock = true;
@@ -662,6 +993,14 @@ namespace ASG.EAT.Plugin
                             PositionBR = positionValues[3];
                         });
                     }
+
+                    // Clear moving state when position query completes
+                    Application.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        CurrentOperation = string.Empty;
+                        IsMoving = false;
+                        IsBusy = false;
+                    });
                     continue;
                 }
 
@@ -710,10 +1049,9 @@ namespace ASG.EAT.Plugin
         //  IDisposable
         // ────────────────────────────────────────────────────────────────
 
-        public new void Dispose()
+        public void Dispose()
         {
             _serial?.Dispose();
-            //base.Dispose();
         }
     }
 

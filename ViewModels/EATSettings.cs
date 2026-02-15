@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO.Ports;
 using System.Runtime.CompilerServices;
+using System.Windows.Data;
 using Newtonsoft.Json;
 
 namespace ASG.EAT.Plugin.ViewModels
@@ -48,11 +49,18 @@ namespace ASG.EAT.Plugin.ViewModels
             set { _defaultSpeed = Math.Max(1, Math.Min(2000, value)); OnPropertyChanged(); }
         }
 
-        private int _defaultStepSize = 25;
+        private int _defaultStepSize = 1;
         public int DefaultStepSize
         {
             get => _defaultStepSize;
             set { _defaultStepSize = Math.Max(1, Math.Min(10000, value)); OnPropertyChanged(); }
+        }
+
+        private string _sensorColor = "#2A2A2A";
+        public string SensorColor
+        {
+            get => _sensorColor;
+            set { _sensorColor = value; OnPropertyChanged(); }
         }
 
         private bool _logSerialTraffic = false;
@@ -60,6 +68,20 @@ namespace ASG.EAT.Plugin.ViewModels
         {
             get => _logSerialTraffic;
             set { _logSerialTraffic = value; OnPropertyChanged(); }
+        }
+
+        private bool _showRawCommand = true;
+        public bool ShowRawCommand
+        {
+            get => _showRawCommand;
+            set { _showRawCommand = value; OnPropertyChanged(); }
+        }
+
+        private bool _showActivityLog = true;
+        public bool ShowActivityLog
+        {
+            get => _showActivityLog;
+            set { _showActivityLog = value; OnPropertyChanged(); }
         }
 
         // ── Motor Configuration (Arduino commands: cA, cB, cC) ─────────
@@ -97,12 +119,19 @@ namespace ASG.EAT.Plugin.ViewModels
         // ── Available Ports (for UI combo box) ─────────────────────────
 
         private ObservableCollection<string> _availablePorts = new ObservableCollection<string>();
+        private static readonly object _portsLock = new object();
 
         [JsonIgnore]
         public ObservableCollection<string> AvailablePorts
         {
             get => _availablePorts;
             set { _availablePorts = value; OnPropertyChanged(); }
+        }
+
+        public EATSettings()
+        {
+            // Enable cross-thread access to AvailablePorts collection
+            BindingOperations.EnableCollectionSynchronization(_availablePorts, _portsLock);
         }
 
         // ── Baud Rate Options (for UI combo box) ───────────────────────

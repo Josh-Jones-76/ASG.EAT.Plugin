@@ -5,7 +5,9 @@
       "Bash(dotnet clean:*)",
       "Bash(dotnet build:*)",
       "Bash(tasklist:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(Select-String -Pattern \"error|warning CS|Build succeeded|Build FAILED\")",
+      "Bash(Select-Object -First 20)"
     ]
   }
 }

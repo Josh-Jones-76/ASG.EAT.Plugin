@@ -17,17 +17,31 @@ namespace ASG.EAT.Plugin.ViewModels
             _serial = EATConnectionManager.Instance.SerialService;
 
             // Wire up serial events
-            _serial.ConnectionStateChanged += (s, connected) =>
+            _serial.ConnectionStateChanged += async (s, connected) =>
             {
                 System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
                 {
                     IsConnected = connected;
                 });
+
+                if (connected)
+                {
+                    // Load defaults from device when connected (from either panel)
+                    await OnConnected();
+                }
+                else
+                {
+                    // Clear values when disconnected (from either panel)
+                    OnDisconnected();
+                }
             };
 
             _serial.ErrorOccurred += (s, msg) =>
             {
-                StatusMessage = $"⚠ {msg}";
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = $"⚠ {msg}";
+                });
             };
 
             // Connection commands
@@ -36,11 +50,31 @@ namespace ASG.EAT.Plugin.ViewModels
             RefreshPortsCommand = new RelayCommand(_ => DoRefreshPorts());
 
             // Commands for sending motor configuration to Arduino
-            SaveSpeedCommand = new RelayCommand(_ => SendMotorConfig("cA", MotorSpeed), _ => true);
-            SaveMaxSpeedCommand = new RelayCommand(_ => SendMotorConfig("cB", MotorMaxSpeed), _ => true);
-            SaveAccelerationCommand = new RelayCommand(_ => SendMotorConfig("cC", MotorAcceleration), _ => true);
+            SaveSpeedCommand = new RelayCommand(_ => SendMotorConfig("cA", MotorSpeed ?? 0), _ => MotorSpeed.HasValue);
+            SaveMaxSpeedCommand = new RelayCommand(_ => SendMotorConfig("cB", MotorMaxSpeed ?? 0), _ => MotorMaxSpeed.HasValue);
+            SaveAccelerationCommand = new RelayCommand(_ => SendMotorConfig("cC", MotorAcceleration ?? 0), _ => MotorAcceleration.HasValue);
 
-            DoRefreshPorts();
+            // Defer port refresh to UI thread - use BeginInvoke to avoid blocking if called from background thread
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher != null)
+            {
+                if (dispatcher.CheckAccess())
+                {
+                    DoRefreshPorts();
+                }
+                else
+                {
+                    dispatcher.BeginInvoke(new System.Action(() => DoRefreshPorts()));
+                }
+            }
+
+            // If already connected (e.g., connected from dockable panel before opening settings),
+            // load the current values from the device
+            if (_serial.IsConnected)
+            {
+                IsConnected = true;
+                System.Threading.Tasks.Task.Run(async () => await OnConnected());
+            }
         }
 
         // ── Settings Properties (delegate to _settings) ────────────────
@@ -63,22 +97,32 @@ namespace ASG.EAT.Plugin.ViewModels
             set { _settings.AutoConnectOnStartup = value; OnPropertyChanged(); _settings.Save(); }
         }
 
-        public int CommandTimeoutMs
-        {
-            get => _settings.CommandTimeoutMs;
-            set { _settings.CommandTimeoutMs = value; OnPropertyChanged(); _settings.Save(); }
-        }
-
-        public int DefaultSpeed
-        {
-            get => _settings.DefaultSpeed;
-            set { _settings.DefaultSpeed = value; OnPropertyChanged(); _settings.Save(); }
-        }
-
         public int DefaultStepSize
         {
             get => _settings.DefaultStepSize;
-            set { _settings.DefaultStepSize = value; OnPropertyChanged(); _settings.Save(); }
+            set
+            {
+                // Validate range
+                if (value < 1 || value > 50)
+                {
+                    System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        System.Windows.MessageBox.Show(
+                            $"Default Step Size must be between 1 and 50.\nValue {value} is out of range.",
+                            "Invalid Value",
+                            System.Windows.MessageBoxButton.OK,
+                            System.Windows.MessageBoxImage.Warning);
+                        StatusMessage = $"⚠ Default Step Size must be 1-50";
+                    });
+                    ClearStatusAfterDelay(3000);
+                    // Don't save invalid value, reset to current valid value
+                    OnPropertyChanged();
+                    return;
+                }
+                _settings.DefaultStepSize = value;
+                OnPropertyChanged();
+                _settings.Save();
+            }
         }
 
         public bool LogSerialTraffic
@@ -87,41 +131,181 @@ namespace ASG.EAT.Plugin.ViewModels
             set { _settings.LogSerialTraffic = value; OnPropertyChanged(); _settings.Save(); }
         }
 
-        public int MotorSpeed
+        public bool ShowRawCommand
         {
-            get => _settings.MotorSpeed;
-            set { _settings.MotorSpeed = value; OnPropertyChanged(); _settings.Save(); }
+            get => _settings.ShowRawCommand;
+            set { _settings.ShowRawCommand = value; OnPropertyChanged(); _settings.Save(); }
         }
 
-        public int MotorMaxSpeed
+        public bool ShowActivityLog
         {
-            get => _settings.MotorMaxSpeed;
-            set { _settings.MotorMaxSpeed = value; OnPropertyChanged(); _settings.Save(); }
+            get => _settings.ShowActivityLog;
+            set { _settings.ShowActivityLog = value; OnPropertyChanged(); _settings.Save(); }
         }
 
-        public int MotorAcceleration
+        // Sensor Color for Tilt Control
+        public string SensorColor
         {
-            get => _settings.MotorAcceleration;
-            set { _settings.MotorAcceleration = value; OnPropertyChanged(); _settings.Save(); }
-        }
-
-        public int Orientation
-        {
-            get => _settings.Orientation;
+            get => _settings.SensorColor;
             set
             {
-                _settings.Orientation = value;
+                _settings.SensorColor = value;
                 OnPropertyChanged();
+                _settings.Save();
+                // Notify listeners that sensor color changed
+                SensorColorChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        // Available sensor colors
+        public System.Collections.ObjectModel.ObservableCollection<string> AvailableSensorColors { get; } =
+            new System.Collections.ObjectModel.ObservableCollection<string>
+            {
+                "#2A2A2A", // Dark Gray (Default)
+                "#1F1F1F", // Almost Black
+                "#444444", // Medium Gray
+                "#1E3A5F", // Dark Blue
+                "#2D4A2B", // Dark Green
+                "#4A2B2B", // Dark Red
+                "#3A2F4A", // Dark Purple
+                "#4A3B2B", // Dark Brown
+                "#3366CC", // Bright Blue
+                "#4CAF50", // Bright Green
+                "#F44336", // Bright Red
+                "#FF9800", // Bright Orange
+                "#9C27B0", // Bright Purple
+                "#00BCD4", // Bright Cyan
+                "#FFEB3B", // Bright Yellow
+                "#E91E63", // Bright Pink
+            };
+
+        // Motor configuration - only show values when connected
+        private int? _motorSpeed = null;
+        public int? MotorSpeed
+        {
+            get => _motorSpeed;
+            set
+            {
+                _motorSpeed = value;
+                OnPropertyChanged();
+                if (value.HasValue)
+                {
+                    _settings.MotorSpeed = value.Value;
+                    _settings.Save();
+                }
+            }
+        }
+
+        private int? _motorMaxSpeed = null;
+        public int? MotorMaxSpeed
+        {
+            get => _motorMaxSpeed;
+            set
+            {
+                _motorMaxSpeed = value;
+                OnPropertyChanged();
+                if (value.HasValue)
+                {
+                    _settings.MotorMaxSpeed = value.Value;
+                    _settings.Save();
+                }
+            }
+        }
+
+        private int? _motorAcceleration = null;
+        public int? MotorAcceleration
+        {
+            get => _motorAcceleration;
+            set
+            {
+                _motorAcceleration = value;
+                OnPropertyChanged();
+                if (value.HasValue)
+                {
+                    _settings.MotorAcceleration = value.Value;
+                    _settings.Save();
+                }
+            }
+        }
+
+        // Event to notify when orientation changes
+        public event EventHandler OrientationChanged;
+
+        // Event to notify when sensor color changes
+        public event EventHandler SensorColorChanged;
+
+        // Orientation - only editable when connected, defaults to 1 when disconnected
+        private int _orientation = 1;
+        public int Orientation
+        {
+            get => _orientation;
+            set
+            {
+                // Only allow changes when connected
+                if (!IsConnected)
+                    return;
+
+                _orientation = value;
+                OnPropertyChanged();
+                _settings.Orientation = value;
                 _settings.Save();
                 OnPropertyChanged(nameof(InnerRotationAngle));
                 // Send orientation command to Arduino when changed
                 SendOrientationCommand(value);
+                // Notify listeners that orientation changed
+                OrientationChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 
         // ── Orientation visualization ───────────────────────────────────
 
-        public double InnerRotationAngle => (Orientation - 1) * 90;
+        public double InnerRotationAngle => (_orientation - 1) * 90;
+
+        // ── Physical Motor Positions ────────────────────────────────────
+
+        private string _positionTL = "—";
+        public string PositionTL
+        {
+            get => _positionTL;
+            set
+            {
+                _positionTL = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _positionTR = "—";
+        public string PositionTR
+        {
+            get => _positionTR;
+            set
+            {
+                _positionTR = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _positionBL = "—";
+        public string PositionBL
+        {
+            get => _positionBL;
+            set
+            {
+                _positionBL = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _positionBR = "—";
+        public string PositionBR
+        {
+            get => _positionBR;
+            set
+            {
+                _positionBR = value;
+                OnPropertyChanged();
+            }
+        }
 
         public System.Collections.ObjectModel.ObservableCollection<string> AvailablePorts
         {
@@ -170,35 +354,78 @@ namespace ASG.EAT.Plugin.ViewModels
         {
             if (string.IsNullOrEmpty(SelectedPort))
             {
-                StatusMessage = "⚠ No port selected";
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = "⚠ No port selected";
+                });
                 return;
             }
 
-            StatusMessage = $"Connecting to {SelectedPort} @ {BaudRate}...";
+            System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+            {
+                StatusMessage = $"Connecting to {SelectedPort} @ {BaudRate}...";
+            });
             bool ok = _serial.Connect(SelectedPort, BaudRate);
 
-            if (ok)
+            if (!ok)
             {
-                StatusMessage = $"✓ Connected to {SelectedPort}";
-
-                // Request current motor configuration from Arduino
-                await LoadMotorConfigurationFromArduino();
-
-                // Load orientation from Arduino
-                await LoadOrientationFromArduino();
-
-                ClearStatusAfterDelay(3000);
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = "⚠ Connection failed. Check port and device.";
+                });
             }
-            else
-            {
-                StatusMessage = "⚠ Connection failed. Check port and device.";
-            }
+            // OnConnected will be called via ConnectionStateChanged event
         }
 
         private void DoDisconnect()
         {
             _serial.Disconnect();
-            StatusMessage = "Disconnected";
+            // OnDisconnected will be called via ConnectionStateChanged event
+        }
+
+        // ── Connection Event Handlers ───────────────────────────────────────
+
+        private async System.Threading.Tasks.Task OnConnected()
+        {
+            System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+            {
+                StatusMessage = $"✓ Connected to {_serial.ConnectedPort}";
+            });
+
+            // Small delay to let Arduino settle
+            await System.Threading.Tasks.Task.Delay(500);
+
+            // Request current motor configuration from Arduino
+            await LoadMotorConfigurationFromArduino();
+
+            // Load orientation from Arduino (already handled in LoadMotorConfigurationFromArduino)
+            // await LoadOrientationFromArduino();
+
+            ClearStatusAfterDelay(3000);
+        }
+
+        private void OnDisconnected()
+        {
+            // Clear motor configuration values on disconnect
+            MotorSpeed = null;
+            MotorMaxSpeed = null;
+            MotorAcceleration = null;
+
+            // Reset orientation to default when disconnected
+            _orientation = 1;
+            OnPropertyChanged(nameof(Orientation));
+            OnPropertyChanged(nameof(InnerRotationAngle));
+
+            // Clear physical positions on disconnect
+            PositionTL = "—";
+            PositionTR = "—";
+            PositionBL = "—";
+            PositionBR = "—";
+
+            System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+            {
+                StatusMessage = "Disconnected";
+            });
             ClearStatusAfterDelay(2000);
         }
 
@@ -212,10 +439,62 @@ namespace ASG.EAT.Plugin.ViewModels
 
         private async void SendMotorConfig(string command, int value)
         {
+            // Validate value ranges
+            string cmdName = command switch
+            {
+                "cA" => "Speed",
+                "cB" => "MaxSpeed",
+                "cC" => "Acceleration",
+                _ => "Config"
+            };
+
+            bool showWarning = false;
+            string warningMessage = "";
+
+            if (command == "cA" || command == "cB") // Speed or MaxSpeed
+            {
+                if (value < 50 || value > 250)
+                {
+                    showWarning = true;
+                    warningMessage = $"⚠ {cmdName} value {value} is outside recommended range (50-250). Continue anyway?";
+                }
+            }
+            else if (command == "cC") // Acceleration
+            {
+                if (value < 50 || value > 350)
+                {
+                    showWarning = true;
+                    warningMessage = $"⚠ Acceleration value {value} is outside recommended range (50-350). Continue anyway?";
+                }
+            }
+
+            // Show warning if needed
+            if (showWarning)
+            {
+                var result = System.Windows.MessageBox.Show(
+                    warningMessage,
+                    "Value Out of Range",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Warning);
+
+                if (result != System.Windows.MessageBoxResult.Yes)
+                {
+                    System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        StatusMessage = "✗ Operation cancelled";
+                    });
+                    ClearStatusAfterDelay(2000);
+                    return;
+                }
+            }
+
             // Check if we have a saved port to connect to
             if (string.IsNullOrEmpty(_settings.SelectedPort))
             {
-                StatusMessage = "⚠ No COM port selected";
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = "⚠ No COM port selected";
+                });
                 return;
             }
 
@@ -225,29 +504,33 @@ namespace ASG.EAT.Plugin.ViewModels
                 bool wasConnected = _serial.IsConnected;
                 if (!wasConnected)
                 {
-                    StatusMessage = $"Connecting to {_settings.SelectedPort}...";
+                    System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        StatusMessage = $"Connecting to {_settings.SelectedPort}...";
+                    });
                     bool connected = _serial.Connect(_settings.SelectedPort, _settings.BaudRate);
                     if (!connected)
                     {
-                        StatusMessage = "⚠ Failed to connect to device";
+                        System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                        {
+                            StatusMessage = "⚠ Failed to connect to device";
+                        });
                         return;
                     }
                 }
 
                 // Send command (e.g., "cA,100")
                 string cmd = $"{command},{value}";
-                StatusMessage = $"Sending {cmd}...";
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = $"Sending {cmd}...";
+                });
                 var response = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
 
-                string cmdName = command switch
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
                 {
-                    "cA" => "Speed",
-                    "cB" => "MaxSpeed",
-                    "cC" => "Acceleration",
-                    _ => "Config"
-                };
-
-                StatusMessage = $"✓ {cmdName} set to {value}";
+                    StatusMessage = $"✓ {cmdName} set to {value}";
+                });
 
                 // Disconnect if we connected temporarily
                 if (!wasConnected)
@@ -257,18 +540,27 @@ namespace ASG.EAT.Plugin.ViewModels
 
                 // Clear status after 3 seconds
                 await System.Threading.Tasks.Task.Delay(3000);
-                StatusMessage = string.Empty;
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = string.Empty;
+                });
             }
             catch (Exception ex)
             {
-                StatusMessage = $"⚠ Error: {ex.Message}";
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = $"⚠ Error: {ex.Message}";
+                });
             }
         }
 
         private async void ClearStatusAfterDelay(int milliseconds)
         {
             await System.Threading.Tasks.Task.Delay(milliseconds);
-            StatusMessage = string.Empty;
+            System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+            {
+                StatusMessage = string.Empty;
+            });
         }
 
         // ── Load Motor Configuration from Arduino ───────────────────────
@@ -332,9 +624,13 @@ namespace ASG.EAT.Plugin.ViewModels
                                             MotorAcceleration = value;
                                             break;
                                         case "Orientation":
+                                            // Set backing field directly, bypassing the IsConnected check
+                                            _orientation = value;
                                             _settings.Orientation = value;
                                             OnPropertyChanged(nameof(Orientation));
                                             OnPropertyChanged(nameof(InnerRotationAngle));
+                                            // Notify listeners that orientation changed
+                                            OrientationChanged?.Invoke(this, EventArgs.Empty);
                                             break;
                                     }
                                 });
@@ -343,28 +639,27 @@ namespace ASG.EAT.Plugin.ViewModels
                     }
                 }
 
-                StatusMessage = "✓ Motor configuration loaded";
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = "✓ Motor configuration loaded";
+                });
             }
             catch (Exception ex)
             {
-                StatusMessage = $"⚠ Failed to load motor config: {ex.Message}";
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = $"⚠ Failed to load motor config: {ex.Message}";
+                });
             }
         }
 
         // ── Load Orientation from Arduino ───────────────────────────────
 
-        private async System.Threading.Tasks.Task LoadOrientationFromArduino()
+        private System.Threading.Tasks.Task LoadOrientationFromArduino()
         {
-            try
-            {
-                // Send 'ep' command to get EEPROM values (which includes orientation)
-                // This is already handled in LoadMotorConfigurationFromArduino above
-                // But we can add a specific check if needed
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"⚠ Failed to load orientation: {ex.Message}";
-            }
+            // Orientation is already loaded as part of LoadMotorConfigurationFromArduino
+            // This method exists for clarity but doesn't need to do additional work
+            return System.Threading.Tasks.Task.CompletedTask;
         }
 
         // ── Send Orientation Command to Arduino ─────────────────────────
@@ -380,12 +675,18 @@ namespace ASG.EAT.Plugin.ViewModels
                 // Send orientation command (e.g., "or,1")
                 string cmd = $"or,{orientation}";
                 var response = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
-                StatusMessage = $"✓ Orientation set to #{orientation}";
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = $"✓ Orientation set to #{orientation}";
+                });
                 ClearStatusAfterDelay(2000);
             }
             catch (Exception ex)
             {
-                StatusMessage = $"⚠ Failed to set orientation: {ex.Message}";
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = $"⚠ Failed to set orientation: {ex.Message}";
+                });
             }
         }
 
