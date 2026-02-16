@@ -56,6 +56,13 @@ namespace ASG.EAT.Plugin.ViewModels
             set { _defaultStepSize = Math.Max(1, Math.Min(10000, value)); OnPropertyChanged(); }
         }
 
+        private double _motorStepSizeMicrons = 1.8;
+        public double MotorStepSizeMicrons
+        {
+            get => _motorStepSizeMicrons;
+            set { _motorStepSizeMicrons = Math.Max(0.1, Math.Min(10.0, value)); OnPropertyChanged(); }
+        }
+
         private string _sensorColor = "#2A2A2A";
         public string SensorColor
         {

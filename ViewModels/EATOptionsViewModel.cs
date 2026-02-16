@@ -125,6 +125,17 @@ namespace ASG.EAT.Plugin.ViewModels
             }
         }
 
+        public double MotorStepSizeMicrons
+        {
+            get => _settings.MotorStepSizeMicrons;
+            set
+            {
+                _settings.MotorStepSizeMicrons = value;
+                OnPropertyChanged();
+                _settings.Save();
+            }
+        }
+
         public bool LogSerialTraffic
         {
             get => _settings.LogSerialTraffic;
