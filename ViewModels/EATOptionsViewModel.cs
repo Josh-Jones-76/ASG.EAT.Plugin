@@ -578,77 +578,48 @@ namespace ASG.EAT.Plugin.ViewModels
 
         private async System.Threading.Tasks.Task LoadMotorConfigurationFromArduino()
         {
+            // The Arduino firmware's "ep" command uses C++ pointer arithmetic
+            // ("string literal" + int) which produces unreliable serial output.
+            // Instead, we load motor config from locally persisted settings
+            // (which stay in sync because we save to settings whenever
+            // the user sends cA/cB/cC/or commands).
+            //
+            // After restoring settings to the UI, we push the saved config
+            // values to the Arduino (cA, cB, cC, or) so it matches our
+            // persisted state — the Arduino resets its config on power-cycle.
+
             try
             {
-                // Send 'ep' command to get EEPROM values
-                var responseLines = await _serial.SendCommandAsync("ep", _settings.CommandTimeoutMs);
-
-                // Parse the response
-                // Expected format:
-                // ***Current EEPROM***
-                // TL: 550
-                // TR: 550
-                // BL: 550
-                // BR: 550
-                // Speed: 100
-                // MaxSpeed: 100
-                // Acceleration: 300
-                // Orientation: 1
-                // ***End Current EEPROM***
-
-                bool inEEPROMBlock = false;
-                foreach (var line in responseLines)
+                // 1. Restore motor configuration and orientation to the UI
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
                 {
-                    if (line.Contains("***Current EEPROM***"))
-                    {
-                        inEEPROMBlock = true;
-                        continue;
-                    }
+                    MotorSpeed = _settings.MotorSpeed;
+                    MotorMaxSpeed = _settings.MotorMaxSpeed;
+                    MotorAcceleration = _settings.MotorAcceleration;
 
-                    if (line.Contains("***End Current EEPROM***"))
-                    {
-                        inEEPROMBlock = false;
-                        break;
-                    }
+                    _orientation = _settings.Orientation;
+                    OnPropertyChanged(nameof(Orientation));
+                    OnPropertyChanged(nameof(InnerRotationAngle));
+                    OrientationChanged?.Invoke(this, EventArgs.Empty);
+                });
 
-                    if (inEEPROMBlock && line.Contains(":"))
-                    {
-                        var parts = line.Split(':');
-                        if (parts.Length == 2)
-                        {
-                            string key = parts[0].Trim();
-                            string valueStr = parts[1].Trim();
+                // 2. Push saved motor config to the Arduino so it matches
+                //    our persisted settings (Arduino loses config on power-cycle).
+                //    Use fire-and-forget with a short timeout — if any fail,
+                //    the user can still manually save from the Settings tab.
+                int shortTimeout = 3000;
 
-                            if (int.TryParse(valueStr, out int value))
-                            {
-                                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
-                                {
-                                    switch (key)
-                                    {
-                                        case "Speed":
-                                            MotorSpeed = value;
-                                            break;
-                                        case "MaxSpeed":
-                                            MotorMaxSpeed = value;
-                                            break;
-                                        case "Acceleration":
-                                            MotorAcceleration = value;
-                                            break;
-                                        case "Orientation":
-                                            // Set backing field directly, bypassing the IsConnected check
-                                            _orientation = value;
-                                            _settings.Orientation = value;
-                                            OnPropertyChanged(nameof(Orientation));
-                                            OnPropertyChanged(nameof(InnerRotationAngle));
-                                            // Notify listeners that orientation changed
-                                            OrientationChanged?.Invoke(this, EventArgs.Empty);
-                                            break;
-                                    }
-                                });
-                            }
-                        }
-                    }
-                }
+                try { await _serial.SendCommandAsync($"cA,{_settings.MotorSpeed}", shortTimeout); }
+                catch { /* non-critical */ }
+
+                try { await _serial.SendCommandAsync($"cB,{_settings.MotorMaxSpeed}", shortTimeout); }
+                catch { /* non-critical */ }
+
+                try { await _serial.SendCommandAsync($"cC,{_settings.MotorAcceleration}", shortTimeout); }
+                catch { /* non-critical */ }
+
+                try { await _serial.SendCommandAsync($"or,{_settings.Orientation}", shortTimeout); }
+                catch { /* non-critical */ }
 
                 System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
                 {
@@ -659,7 +630,7 @@ namespace ASG.EAT.Plugin.ViewModels
             {
                 System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
                 {
-                    StatusMessage = $"⚠ Failed to load motor config: {ex.Message}";
+                    StatusMessage = $"⚠ Note: {ex.Message} — using saved settings";
                 });
             }
         }

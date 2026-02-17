@@ -186,6 +186,13 @@ namespace ASG.EAT.Plugin
                         RaisePropertyChanged(nameof(ShowActivityLog));
                     });
                 }
+                else if (e.PropertyName == nameof(ViewModels.EATOptionsViewModel.DefaultStepSize))
+                {
+                    Application.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        LoadDefaultStepSizes();
+                    });
+                }
             };
 
             // Perform initial setup
@@ -322,7 +329,9 @@ namespace ASG.EAT.Plugin
 
         private void LoadDefaultStepSizes()
         {
-            int defaultSteps = _settings.DefaultStepSize;
+            // Read from the shared OptionsViewModel so we pick up live changes
+            // (the local _settings is a separate instance loaded at startup)
+            int defaultSteps = ViewModels.ViewModelManager.Instance.OptionsViewModel.DefaultStepSize;
 
             // Set all step sizes to the default from settings
             TopSteps = defaultSteps;
