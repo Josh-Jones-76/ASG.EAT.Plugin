@@ -40,6 +40,7 @@ using NINA.WPF.Base.ViewModel;
 [assembly: AssemblyMetadata("Homepage", "https://www.asgastronomy.com")]
 [assembly: AssemblyMetadata("Repository", "https://github.com/asg-astronomy/eat-plugin")]
 [assembly: AssemblyMetadata("Tags", "Tilt,Alignment,Hardware,Arduino")]
+[assembly: AssemblyMetadata("FeaturedImageURL", "http://asgastronomy.com/downloads/eat/ASG-Logo-dark.png")]
 [assembly: AssemblyMetadata("MinimumApplicationVersion", "3.0.0.9001")]
 
 namespace ASG.EAT.Plugin
@@ -193,6 +194,16 @@ namespace ASG.EAT.Plugin
                         LoadDefaultStepSizes();
                     });
                 }
+            };
+
+            // Subscribe to motor position set events to refresh positions
+            ViewModels.ViewModelManager.Instance.OptionsViewModel.PositionSetCompleted += (s, e) =>
+            {
+                Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    // Refresh positions from Arduino after a motor position was set
+                    DoCmd("cp");
+                });
             };
 
             // Perform initial setup
@@ -967,6 +978,20 @@ namespace ASG.EAT.Plugin
 
             foreach (var line in lines)
             {
+                // Parse orientation value from Arduino (e.g., "{UI|SET|orientationSelection.Value=2}")
+                if (line.Contains("{UI|SET|orientationSelection.Value="))
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(line, @"orientationSelection\.Value=(\d+)");
+                    if (match.Success && int.TryParse(match.Groups[1].Value, out int orientationValue))
+                    {
+                        Application.Current?.Dispatcher?.Invoke(() =>
+                        {
+                            ViewModels.ViewModelManager.Instance.OptionsViewModel.SetOrientationFromDevice(orientationValue);
+                        });
+                    }
+                    continue;
+                }
+
                 // Check for movement finished message
                 if (line.Contains("***finished movement***"))
                 {

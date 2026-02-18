@@ -11,7 +11,12 @@
       "Bash(git clone:*)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "WebFetch(domain:nighttime-imaging.eu)",
+      "WebFetch(domain:www.nuget.org)",
+      "WebFetch(domain:bitbucket.org)"
     ]
   }
 }

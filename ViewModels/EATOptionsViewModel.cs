@@ -54,6 +54,15 @@ namespace ASG.EAT.Plugin.ViewModels
             SaveMaxSpeedCommand = new RelayCommand(_ => SendMotorConfig("cB", MotorMaxSpeed ?? 0), _ => MotorMaxSpeed.HasValue);
             SaveAccelerationCommand = new RelayCommand(_ => SendMotorConfig("cC", MotorAcceleration ?? 0), _ => MotorAcceleration.HasValue);
 
+            // Commands for setting motor positions directly (m1-m4)
+            SaveM1PositionCommand = new RelayCommand(_ => SendSetMotorPosition("m1", SetPositionM1), _ => IsConnected);
+            SaveM2PositionCommand = new RelayCommand(_ => SendSetMotorPosition("m2", SetPositionM2), _ => IsConnected);
+            SaveM3PositionCommand = new RelayCommand(_ => SendSetMotorPosition("m3", SetPositionM3), _ => IsConnected);
+            SaveM4PositionCommand = new RelayCommand(_ => SendSetMotorPosition("m4", SetPositionM4), _ => IsConnected);
+
+            // Firmware check command
+            CheckFirmwareCommand = new RelayCommand(_ => DoCheckFirmware(), _ => IsConnected);
+
             // Defer port refresh to UI thread - use BeginInvoke to avoid blocking if called from background thread
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
             if (dispatcher != null)
@@ -245,6 +254,9 @@ namespace ASG.EAT.Plugin.ViewModels
         // Event to notify when sensor color changes
         public event EventHandler SensorColorChanged;
 
+        // Event to notify when a motor position has been set (m1-m4) so dockable panel can refresh
+        public event EventHandler PositionSetCompleted;
+
         // Orientation - only editable when connected, defaults to 1 when disconnected
         private int _orientation = 1;
         public int Orientation
@@ -268,6 +280,21 @@ namespace ASG.EAT.Plugin.ViewModels
             }
         }
 
+        /// <summary>
+        /// Sets orientation from the Arduino device response without sending
+        /// the value back to the Arduino. The device is the source of truth.
+        /// </summary>
+        public void SetOrientationFromDevice(int value)
+        {
+            value = Math.Max(1, Math.Min(4, value));
+            _orientation = value;
+            _settings.Orientation = value;
+            _settings.Save();
+            OnPropertyChanged(nameof(Orientation));
+            OnPropertyChanged(nameof(InnerRotationAngle));
+            OrientationChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         // ── Orientation visualization ───────────────────────────────────
 
         public double InnerRotationAngle => (_orientation - 1) * 90;
@@ -282,6 +309,9 @@ namespace ASG.EAT.Plugin.ViewModels
             {
                 _positionTL = value;
                 OnPropertyChanged();
+                // Sync M2 input field with current position (M2 = TL)
+                if (int.TryParse(value, out int pos))
+                    SetPositionM2 = pos;
             }
         }
 
@@ -293,6 +323,9 @@ namespace ASG.EAT.Plugin.ViewModels
             {
                 _positionTR = value;
                 OnPropertyChanged();
+                // Sync M1 input field with current position (M1 = TR)
+                if (int.TryParse(value, out int pos))
+                    SetPositionM1 = pos;
             }
         }
 
@@ -304,6 +337,9 @@ namespace ASG.EAT.Plugin.ViewModels
             {
                 _positionBL = value;
                 OnPropertyChanged();
+                // Sync M4 input field with current position (M4 = BL)
+                if (int.TryParse(value, out int pos))
+                    SetPositionM4 = pos;
             }
         }
 
@@ -315,7 +351,49 @@ namespace ASG.EAT.Plugin.ViewModels
             {
                 _positionBR = value;
                 OnPropertyChanged();
+                // Sync M3 input field with current position (M3 = BR)
+                if (int.TryParse(value, out int pos))
+                    SetPositionM3 = pos;
             }
+        }
+
+        // ── Set Motor Position Input Values ──────────────────────────────
+
+        private int _setPositionM1 = 0;
+        public int SetPositionM1
+        {
+            get => _setPositionM1;
+            set { _setPositionM1 = value; OnPropertyChanged(); }
+        }
+
+        private int _setPositionM2 = 0;
+        public int SetPositionM2
+        {
+            get => _setPositionM2;
+            set { _setPositionM2 = value; OnPropertyChanged(); }
+        }
+
+        private int _setPositionM3 = 0;
+        public int SetPositionM3
+        {
+            get => _setPositionM3;
+            set { _setPositionM3 = value; OnPropertyChanged(); }
+        }
+
+        private int _setPositionM4 = 0;
+        public int SetPositionM4
+        {
+            get => _setPositionM4;
+            set { _setPositionM4 = value; OnPropertyChanged(); }
+        }
+
+        // ── Firmware Version ──────────────────────────────────────────────
+
+        private string _firmwareVersion = "—";
+        public string FirmwareVersion
+        {
+            get => _firmwareVersion;
+            set { _firmwareVersion = value; OnPropertyChanged(); }
         }
 
         public System.Collections.ObjectModel.ObservableCollection<string> AvailablePorts
@@ -351,6 +429,11 @@ namespace ASG.EAT.Plugin.ViewModels
         public ICommand SaveSpeedCommand { get; }
         public ICommand SaveMaxSpeedCommand { get; }
         public ICommand SaveAccelerationCommand { get; }
+        public ICommand SaveM1PositionCommand { get; }
+        public ICommand SaveM2PositionCommand { get; }
+        public ICommand SaveM3PositionCommand { get; }
+        public ICommand SaveM4PositionCommand { get; }
+        public ICommand CheckFirmwareCommand { get; }
 
         private string _statusMessage = string.Empty;
         public string StatusMessage
@@ -590,23 +673,21 @@ namespace ASG.EAT.Plugin.ViewModels
 
             try
             {
-                // 1. Restore motor configuration and orientation to the UI
+                // 1. Restore motor configuration to the UI (NOT orientation —
+                //    orientation is read from the Arduino via cp response,
+                //    since another app may have changed it)
                 System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
                 {
                     MotorSpeed = _settings.MotorSpeed;
                     MotorMaxSpeed = _settings.MotorMaxSpeed;
                     MotorAcceleration = _settings.MotorAcceleration;
-
-                    _orientation = _settings.Orientation;
-                    OnPropertyChanged(nameof(Orientation));
-                    OnPropertyChanged(nameof(InnerRotationAngle));
-                    OrientationChanged?.Invoke(this, EventArgs.Empty);
                 });
 
                 // 2. Push saved motor config to the Arduino so it matches
                 //    our persisted settings (Arduino loses config on power-cycle).
                 //    Use fire-and-forget with a short timeout — if any fail,
                 //    the user can still manually save from the Settings tab.
+                //    NOTE: Orientation is NOT pushed — Arduino is source of truth.
                 int shortTimeout = 3000;
 
                 try { await _serial.SendCommandAsync($"cA,{_settings.MotorSpeed}", shortTimeout); }
@@ -616,9 +697,6 @@ namespace ASG.EAT.Plugin.ViewModels
                 catch { /* non-critical */ }
 
                 try { await _serial.SendCommandAsync($"cC,{_settings.MotorAcceleration}", shortTimeout); }
-                catch { /* non-critical */ }
-
-                try { await _serial.SendCommandAsync($"or,{_settings.Orientation}", shortTimeout); }
                 catch { /* non-critical */ }
 
                 System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
@@ -668,6 +746,111 @@ namespace ASG.EAT.Plugin.ViewModels
                 System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
                 {
                     StatusMessage = $"⚠ Failed to set orientation: {ex.Message}";
+                });
+            }
+        }
+
+        // ── Send Set Motor Position to Arduino ────────────────────────
+
+        private async void SendSetMotorPosition(string command, int value)
+        {
+            if (!_serial.IsConnected)
+                return;
+
+            string motorName = command switch
+            {
+                "m1" => "M1 (TR)",
+                "m2" => "M2 (TL)",
+                "m3" => "M3 (BR)",
+                "m4" => "M4 (BL)",
+                _ => command
+            };
+
+            // Show caution dialog before setting motor position
+            var result = System.Windows.MessageBox.Show(
+                $"You are about to set {motorName} to position {value}.\n\n" +
+                "Use Caution: Setting motor positions manually can lead to misleading " +
+                "positioning and should only be done if you know what you are doing.\n\n" +
+                "For example, if you have removed all tilt from your system and the sensor " +
+                "is in a good position but motor values are vastly different, it can be a " +
+                "good idea to reset them all consistently to that position.\n\n" +
+                "Are you sure you want to continue?",
+                "Set Motor Position - Caution",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning);
+
+            if (result != System.Windows.MessageBoxResult.Yes)
+            {
+                StatusMessage = "Set position cancelled.";
+                ClearStatusAfterDelay(2000);
+                return;
+            }
+
+            try
+            {
+                string cmd = $"{command},{value}";
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = $"Setting {motorName} position to {value}...";
+                });
+                var response = await _serial.SendCommandAsync(cmd, _settings.CommandTimeoutMs);
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = $"✓ {motorName} position set to {value}";
+                    // Notify dockable panel to refresh positions
+                    PositionSetCompleted?.Invoke(this, EventArgs.Empty);
+                });
+                ClearStatusAfterDelay(3000);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = $"⚠ Failed to set {motorName}: {ex.Message}";
+                });
+            }
+        }
+
+        // ── Firmware Check ────────────────────────────────────────────────
+
+        private async void DoCheckFirmware()
+        {
+            if (!_serial.IsConnected)
+                return;
+
+            try
+            {
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StatusMessage = "Checking firmware...";
+                    FirmwareVersion = "Checking...";
+                });
+
+                var response = await _serial.SendCommandAsync("fv", _settings.CommandTimeoutMs);
+
+                string fwVersion = "Unknown";
+                foreach (var line in response)
+                {
+                    if (line.StartsWith("FW:"))
+                    {
+                        fwVersion = line.Substring(3).Trim();
+                        break;
+                    }
+                }
+
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    FirmwareVersion = fwVersion;
+                    StatusMessage = $"✓ Firmware: {fwVersion}";
+                });
+                ClearStatusAfterDelay(3000);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    FirmwareVersion = "Error";
+                    StatusMessage = $"⚠ Firmware check failed: {ex.Message}";
                 });
             }
         }
