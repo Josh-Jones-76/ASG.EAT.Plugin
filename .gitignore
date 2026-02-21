@@ -376,3 +376,4 @@ desktop.ini
 
 # Office temporary files
 ~$*
+/nuget.config
