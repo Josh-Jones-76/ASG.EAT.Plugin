@@ -21,13 +21,6 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Download NINA
-        run: |
-          $ninaUrl = "https://github.com/isbeorn/nina/releases/download/3.0.0.9001/NINA-3.0.0.9001-x64.zip"
-          Invoke-WebRequest -Uri $ninaUrl -OutFile "nina.zip"
-          Expand-Archive -Path "nina.zip" -DestinationPath "nina"
-          echo "NINA_DIR=${{ github.workspace }}\nina" >> $env:GITHUB_ENV
-
       - name: Restore dependencies
         run: dotnet restore ASG.EAT.Plugin.csproj
 
