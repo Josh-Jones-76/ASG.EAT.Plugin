@@ -36,40 +36,9 @@
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- 
-      NINA Assembly References
-      Update HintPath to your local NINA installation directory.
-    -->
-    <Reference Include="NINA.Core">
-      <HintPath>$(NINA_DIR)\NINA.Core.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="NINA.Plugin">
-      <HintPath>$(NINA_DIR)\NINA.Plugin.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="NINA.Equipment">
-      <HintPath>$(NINA_DIR)\NINA.Equipment.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="NINA.WPF.Base">
-      <HintPath>$(NINA_DIR)\NINA.WPF.Base.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="NINA.Image">
-      <HintPath>$(NINA_DIR)\NINA.Image.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="NINA.Astrometry">
-      <HintPath>$(NINA_DIR)\NINA.Astrometry.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="NINA.Profile">
-      <HintPath>$(NINA_DIR)\NINA.Profile.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-  </ItemGroup>
+<ItemGroup>
+  <PackageReference Include="NINA.Plugin" Version="3.0.0.9001" />
+</ItemGroup>
 
   <ItemGroup>
     <!-- MEF for [Export] and [ImportingConstructor] attributes -->
