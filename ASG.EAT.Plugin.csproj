@@ -91,4 +91,8 @@
     <Resource Include="Assets\EAT-Outer.png" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include=".github\workflows\release.yml" />
+  </ItemGroup>
+
 </Project>

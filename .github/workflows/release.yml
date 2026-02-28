@@ -1,0 +1,40 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'   # Triggers on tags like v1.0.0, v1.2.3, etc.
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore ASG.EAT.Plugin.csproj
+
+      - name: Build Release
+        run: dotnet build ASG.EAT.Plugin.csproj --configuration Release --no-restore
+
+      - name: Locate DLL
+        id: find_dll
+        run: |
+          $dll = Get-ChildItem -Path . -Recurse -Filter "ASG.EAT.Plugin.dll" | Where-Object { $_.FullName -like "*Release*" } | Select-Object -First 1
+          echo "DLL_PATH=$($dll.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ASG.EAT.Plugin ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: ${{ steps.find_dll.outputs.DLL_PATH }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
